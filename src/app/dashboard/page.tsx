@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+
+export const instant = false;
 import QuickCapture from "./QuickCapture";
 import ItemRow from "./ItemRow";
 import { signOut } from "./actions";
