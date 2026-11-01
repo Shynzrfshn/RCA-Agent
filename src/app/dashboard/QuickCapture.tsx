@@ -1,7 +1,6 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
-import { addItem } from "./actions";
 
 const KINDS = [
   { value: "task", label: "کار" },
@@ -10,7 +9,11 @@ const KINDS = [
   { value: "idea", label: "ایده" },
 ];
 
-export default function QuickCapture() {
+export default function QuickCapture({
+  onAdd,
+}: {
+  onAdd: (content: string, kind: string) => Promise<void>;
+}) {
   const contentId = useId();
   const kindId = useId();
   const [kind, setKind] = useState("task");
@@ -21,7 +24,7 @@ export default function QuickCapture() {
     const content = formData.get("content") as string;
     if (!content.trim()) return;
     setPending(true);
-    await addItem(content, kind);
+    await onAdd(content, kind);
     setPending(false);
     formRef.current?.reset();
   }

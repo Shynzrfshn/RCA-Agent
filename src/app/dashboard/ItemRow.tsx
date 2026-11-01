@@ -1,17 +1,15 @@
 "use client";
 
 import { useId } from "react";
-import { toggleItem } from "./actions";
 
 export default function ItemRow({
-  id,
   content,
   done,
+  onToggle,
 }: {
-  id: string;
   content: string;
-  kind: string;
   done: boolean;
+  onToggle: (done: boolean) => void;
 }) {
   const checkboxId = useId();
 
@@ -21,7 +19,7 @@ export default function ItemRow({
         id={checkboxId}
         type="checkbox"
         checked={done}
-        onChange={(e) => toggleItem(id, e.target.checked)}
+        onChange={(e) => onToggle(e.target.checked)}
         className="mt-1 size-4 shrink-0 accent-[var(--accent)]"
       />
       <label

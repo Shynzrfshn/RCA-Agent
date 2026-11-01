@@ -1,9 +1,12 @@
 import type { NextConfig } from "next";
 
+const basePath = process.env.NODE_ENV === "production" ? "/RCA-Agent" : "";
+
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
+  output: "export",
+  basePath,
+  trailingSlash: true,
+  env: { NEXT_PUBLIC_BASE_PATH: basePath },
   turbopack: {
     rules: {
       "*.css": {
