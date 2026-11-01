@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { toggleItem } from "./actions";
 
 export default function ItemRow({
@@ -12,17 +13,23 @@ export default function ItemRow({
   kind: string;
   done: boolean;
 }) {
+  const checkboxId = useId();
+
   return (
-    <li className="flex items-start gap-3 rounded-lg border p-3" dir="rtl">
+    <li className="flex items-start gap-3 rounded-lg border border-border bg-surface p-3">
       <input
+        id={checkboxId}
         type="checkbox"
         checked={done}
         onChange={(e) => toggleItem(id, e.target.checked)}
-        className="mt-1"
+        className="mt-1 size-4 shrink-0 accent-[var(--accent)]"
       />
-      <p className={done ? "flex-1 text-neutral-400 line-through" : "flex-1"}>
+      <label
+        htmlFor={checkboxId}
+        className={done ? "flex-1 text-muted line-through" : "flex-1"}
+      >
         {content}
-      </p>
+      </label>
     </li>
   );
 }
