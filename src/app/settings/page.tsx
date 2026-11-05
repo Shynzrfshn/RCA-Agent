@@ -16,6 +16,7 @@ import {
 } from "@/lib/push";
 import { createClient } from "@/lib/supabase/client";
 import type { EmailAccount, Profile } from "@/lib/types";
+import ThemePicker from "./ThemePicker";
 
 const TIMEZONES = [
   "Asia/Tehran",
@@ -252,6 +253,10 @@ export default function SettingsPage() {
               </div>
             </form>
           )}
+        </Section>
+
+        <Section title="ظاهر">
+          <ThemePicker />
         </Section>
 
         <Section title="اعلان‌ها">
