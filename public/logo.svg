@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 320">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5b4cf0"/>
+      <stop offset="1" stop-color="#a855f7"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.75" cy="0.25" r="0.6">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="txt" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5b4cf0"/>
+      <stop offset="1" stop-color="#a855f7"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(16 16) scale(0.5625)">
+    <rect width="512" height="512" rx="128" fill="url(#bg)"/>
+    <rect width="512" height="512" rx="128" fill="url(#glow)"/>
+    <path d="M148 384V176h92a70 70 0 0 1 0 140h-92m92 0 82 72" fill="none" stroke="#fff" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M382 96Q382 150 436 150Q382 150 382 204Q382 150 328 150Q382 150 382 96Z" fill="#fff"/>
+  </g>
+  <text x="340" y="205" font-family="Inter, 'Segoe UI', system-ui, sans-serif" font-size="150" font-weight="800" letter-spacing="-4" fill="#16151f">RCA <tspan fill="url(#txt)" font-weight="600">Agent</tspan></text>
+</svg>

@@ -23,8 +23,13 @@ serve(async (req) => {
   }
 
   const message = typeof body.message === "string" ? body.message.trim() : "";
-  if (!message) throw new HttpError(400, "message_required");
+  if (!message && typeof body.image !== "string") throw new HttpError(400, "message_required");
   if (message.length > 8000) throw new HttpError(413, "message_too_long");
+  const image = typeof body.image === "string" ? body.image : undefined;
+  if (image && !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(image)) {
+    throw new HttpError(400, "bad_image");
+  }
+  if (image && image.length > 3_000_000) throw new HttpError(413, "image_too_large");
 
   const { data: past } = await admin
     .from("agent_messages")
@@ -37,8 +42,8 @@ serve(async (req) => {
     .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
   while (history.length && history[0].role !== "user") history.shift();
 
-  await admin.from("agent_messages").insert({ user_id: user.id, role: "user", content: message });
-  const result = await runAgent({ db, admin, userId: user.id, history, message });
+  await admin.from("agent_messages").insert({ user_id: user.id, role: "user", content: image ? `📷 ${message || "عکس"}` : message });
+  const result = await runAgent({ db, admin, userId: user.id, history, message, image });
   await admin
     .from("agent_messages")
     .insert({ user_id: user.id, role: "assistant", content: result.reply });

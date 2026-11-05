@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { LogoMark, SendIcon, TrashIcon } from "@/components/Icons";
+import { PhotoButton, PhotoPreview } from "@/components/PhotoPicker";
 import { ErrorNote, Markdownish } from "@/components/ui";
 import { askAgent } from "@/lib/api";
 import { faTime } from "@/lib/format";
@@ -23,6 +24,7 @@ export default function ChatPage() {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [image, setImage] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -40,14 +42,19 @@ export default function ChatPage() {
 
   async function send(content: string) {
     const msg = content.trim();
-    if (!msg || busy) return;
+    const photo = image;
+    if ((!msg && !photo) || busy) return;
     setText("");
+    setImage(null);
     setError(null);
     setBusy(true);
     const now = new Date().toISOString();
-    setMessages((m) => [...m, { id: `local-${now}`, role: "user", content: msg, created_at: now }]);
+    setMessages((m) => [
+      ...m,
+      { id: `local-${now}`, role: "user", content: photo ? `📷 ${msg || "عکس"}` : msg, created_at: now },
+    ]);
     try {
-      const res = await askAgent(msg);
+      const res = await askAgent(msg, photo ?? undefined);
       setMessages((m) => [
         ...m,
         { id: `reply-${Date.now()}`, role: "assistant", content: res.reply, created_at: new Date().toISOString() },
@@ -127,8 +134,14 @@ export default function ChatPage() {
             e.preventDefault();
             send(text);
           }}
-          className="card sticky bottom-20 flex items-end gap-2 p-2 md:bottom-6"
+          className="card sticky bottom-20 flex flex-wrap items-end gap-2 p-2 md:bottom-6"
         >
+          {image && (
+            <div className="w-full p-1">
+              <PhotoPreview src={image} onRemove={() => setImage(null)} />
+            </div>
+          )}
+          <PhotoButton onPick={setImage} onError={setError} disabled={busy} className="btn btn-ghost size-11 shrink-0 p-0" />
           <label htmlFor={inputId} className="sr-only">پیام</label>
           <textarea
             id={inputId}
@@ -142,9 +155,9 @@ export default function ChatPage() {
             }}
             rows={1}
             placeholder="پیامت رو بنویس…"
-            className="max-h-40 flex-1 resize-none bg-transparent px-3 py-2.5 outline-none"
+            className="max-h-40 min-w-0 flex-1 resize-none bg-transparent px-3 py-2.5 outline-none"
           />
-          <button type="submit" disabled={busy || !text.trim()} className="btn btn-primary size-11 shrink-0 p-0" aria-label="ارسال">
+          <button type="submit" disabled={busy || (!text.trim() && !image)} className="btn btn-primary size-11 shrink-0 p-0" aria-label="ارسال">
             <SendIcon width={18} height={18} />
           </button>
         </form>

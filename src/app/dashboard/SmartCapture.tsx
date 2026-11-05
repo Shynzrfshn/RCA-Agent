@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useId, useState } from "react";
 import { SendIcon, SparkIcon } from "@/components/Icons";
+import { PhotoButton, PhotoPreview } from "@/components/PhotoPicker";
 import { Markdownish } from "@/components/ui";
 import { askAgent } from "@/lib/api";
 import { addItem } from "@/lib/data";
@@ -20,16 +21,18 @@ export default function SmartCapture({ onChanged }: { onChanged: () => void }) {
   const [busy, setBusy] = useState<"agent" | "quick" | null>(null);
   const [reply, setReply] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [image, setImage] = useState<string | null>(null);
 
   async function sendToAgent() {
-    if (!text.trim()) return;
+    if (!text.trim() && !image) return;
     setBusy("agent");
     setError(null);
     setReply(null);
     try {
-      const res = await askAgent(text.trim());
+      const res = await askAgent(text.trim(), image ?? undefined);
       setReply(res.reply);
       setText("");
+      setImage(null);
       if (res.actions.length) onChanged();
     } catch (e) {
       setError((e as Error).message);
@@ -76,6 +79,12 @@ export default function SmartCapture({ onChanged }: { onChanged: () => void }) {
         placeholder="مثلاً: پنج‌شنبه ساعت ۶ عصر یادم بنداز قبض برق رو بدم"
         className="field resize-none text-base"
       />
+      {image && (
+        <div className="mt-3 flex items-center gap-3">
+          <PhotoPreview src={image} onRemove={() => setImage(null)} />
+          <span className="text-xs text-muted">ایجنت عکس رو می‌خونه و کار لازم رو انجام می‌ده (مثلاً ثبت داروهای نسخه).</span>
+        </div>
+      )}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-1.5">
           {EXAMPLES.map((ex) => (
@@ -90,10 +99,11 @@ export default function SmartCapture({ onChanged }: { onChanged: () => void }) {
           ))}
         </div>
         <div className="flex gap-2">
-          <button className="btn btn-ghost" onClick={quickAdd} disabled={!!busy || !text.trim()}>
+          <PhotoButton onPick={setImage} onError={setError} disabled={!!busy} />
+          <button className="btn btn-ghost" onClick={quickAdd} disabled={!!busy || !text.trim() || !!image}>
             {busy === "quick" ? "…" : "ثبت سریع"}
           </button>
-          <button className="btn btn-primary" onClick={sendToAgent} disabled={!!busy || !text.trim()}>
+          <button className="btn btn-primary" onClick={sendToAgent} disabled={!!busy || (!text.trim() && !image)}>
             <SendIcon width={16} height={16} />
             {busy === "agent" ? "در حال فکر کردن…" : "بسپار به ایجنت"}
           </button>
