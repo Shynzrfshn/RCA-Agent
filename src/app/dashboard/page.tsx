@@ -1,144 +1,262 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import type { User } from "@supabase/supabase-js";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import AppShell from "@/components/AppShell";
+import { CheckIcon, ClockIcon, MailIcon, PillIcon, RefreshIcon, SparkIcon } from "@/components/Icons";
+import { Empty, ErrorNote, Markdownish, ProgressRing, Section, StatCard } from "@/components/ui";
+import { callFunction } from "@/lib/api";
+import { completeItem, loadDoses, loadOpenItems, setDoseStatus, todayBounds } from "@/lib/data";
+import { faDate, faTime, faWhen, greeting, toFa } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
-import QuickCapture from "./QuickCapture";
-import ItemRow from "./ItemRow";
+import type { Dose, Item } from "@/lib/types";
+import SmartCapture from "./SmartCapture";
 
-export type Item = {
-  id: string;
-  kind: string;
-  content: string;
-  done: boolean;
-  created_at: string;
-};
-
-const KIND_ORDER = ["task", "reminder", "note", "idea"] as const;
-const KIND_LABELS: Record<string, string> = {
-  task: "کارها",
-  reminder: "یادآوری‌ها",
-  note: "یادداشت‌ها",
-  idea: "ایده‌ها",
-};
+type Briefing = { day: string; content: string };
 
 export default function DashboardPage() {
-  const router = useRouter();
   const supabase = createClient();
-  const [user, setUser] = useState<User | null>(null);
   const [items, setItems] = useState<Item[] | null>(null);
+  const [doses, setDoses] = useState<Dose[]>([]);
+  const [briefing, setBriefing] = useState<Briefing | null>(null);
+  const [urgentMail, setUrgentMail] = useState(0);
+  const [adherence, setAdherence] = useState<{ taken: number; total: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [briefingBusy, setBriefingBusy] = useState(false);
 
-  const loadItems = useCallback(async () => {
-    const { data } = await supabase
-      .from("items")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(100);
-    setItems((data as Item[]) ?? []);
+  const load = useCallback(async () => {
+    const { start, end } = todayBounds();
+    try {
+      setItems(await loadOpenItems());
+    } catch (e) {
+      setError((e as Error).message);
+      setItems([]);
+    }
+    // The rest needs the v2 migration; fail soft.
+    loadDoses(start, end).then(setDoses, () => setDoses([]));
+    supabase
+      .from("briefings")
+      .select("day, content")
+      .order("day", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setBriefing(data));
+    supabase
+      .from("emails")
+      .select("id", { count: "exact", head: true })
+      .eq("is_read", false)
+      .eq("category", "urgent")
+      .then(({ count }) => setUrgentMail(count ?? 0));
+    supabase.rpc("adherence", { p_days: 7 }).then(({ data }) => {
+      if (!data) return;
+      const rows = data as { taken: number; total: number }[];
+      setAdherence({
+        taken: rows.reduce((a, r) => a + r.taken, 0),
+        total: rows.reduce((a, r) => a + r.total, 0),
+      });
+    });
   }, [supabase]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        router.replace("/login/");
-        return;
-      }
-      setUser(session.user);
-      if (window.location.search) {
-        window.history.replaceState(null, "", window.location.pathname);
-      }
-      loadItems();
-    });
-  }, [supabase, router, loadItems]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load
+    load();
+  }, [load]);
 
-  async function addItem(content: string, kind: string) {
-    if (!user) return;
-    await supabase.from("items").insert({ user_id: user.id, content, kind });
-    await loadItems();
+  const { end } = todayBounds();
+  const dueToday = useMemo(
+    () => (items ?? []).filter((i) => i.due_at && i.due_at < end),
+    [items, end],
+  );
+  const overdue = dueToday.filter((i) => i.due_at! < new Date().toISOString());
+  const takenToday = doses.filter((d) => d.status === "taken").length;
+
+  const timeline = useMemo(() => {
+    const rows = [
+      ...doses.map((d) => ({ kind: "dose" as const, at: d.scheduled_for, dose: d })),
+      ...dueToday.map((i) => ({ kind: "item" as const, at: i.due_at!, item: i })),
+    ];
+    return rows.sort((a, b) => a.at.localeCompare(b.at));
+  }, [doses, dueToday]);
+
+  async function markDose(d: Dose, status: "taken" | "skipped" | "pending") {
+    setDoses((prev) => prev.map((x) => (x.id === d.id ? { ...x, status } : x)));
+    try {
+      await setDoseStatus(d.id, status);
+    } catch (e) {
+      setError((e as Error).message);
+      load();
+    }
   }
 
-  async function toggleItem(id: string, done: boolean) {
-    setItems((prev) =>
-      prev ? prev.map((i) => (i.id === id ? { ...i, done } : i)) : prev,
-    );
-    await supabase.from("items").update({ done }).eq("id", id);
+  async function finishItem(i: Item) {
+    setItems((prev) => prev?.filter((x) => x.id !== i.id) ?? prev);
+    try {
+      await completeItem(i.id);
+      if (i.recurrence) load();
+    } catch (e) {
+      setError((e as Error).message);
+      load();
+    }
   }
 
-  async function signOut() {
-    await supabase.auth.signOut();
-    router.replace("/login/");
+  async function refreshBriefing() {
+    setBriefingBusy(true);
+    setError(null);
+    try {
+      setBriefing(await callFunction<Briefing>("agent", { action: "briefing" }));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBriefingBusy(false);
+    }
   }
-
-  if (!user || items === null) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-muted">
-        در حال بارگذاری...
-      </div>
-    );
-  }
-
-  const pendingTasks = items.filter((i) => i.kind === "task" && !i.done);
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border">
-        <div className="mx-auto flex max-w-2xl items-center justify-between px-6 py-4">
-          <h1 className="font-bold">RCA Agent</h1>
-          <button
-            type="button"
-            onClick={signOut}
-            className="rounded-md px-2 py-1 text-sm text-muted underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            خروج ({user.email})
-          </button>
+    <AppShell title={`${greeting()} 👋`} subtitle={faDate(new Date(), { year: "numeric" })}>
+      <div className="space-y-8">
+        {error && <ErrorNote>{error}</ErrorNote>}
+
+        <SmartCapture onChanged={load} />
+
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatCard
+            label="کارهای امروز"
+            value={toFa(dueToday.length)}
+            hint={overdue.length ? `${toFa(overdue.length)} عقب‌افتاده` : "همه سر وقت"}
+            tone={overdue.length ? "danger" : "accent"}
+            icon={<CheckIcon width={16} height={16} />}
+          />
+          <StatCard
+            label="داروهای امروز"
+            value={`${toFa(takenToday)}/${toFa(doses.length)}`}
+            hint={doses.length ? "دوز مصرف‌شده" : "دارویی ثبت نشده"}
+            tone="success"
+            icon={<PillIcon width={16} height={16} />}
+          />
+          <StatCard
+            label="ایمیل فوری"
+            value={toFa(urgentMail)}
+            hint={<Link href="/inbox/" className="underline-offset-2 hover:underline">صندوق ورودی</Link>}
+            tone={urgentMail ? "warning" : "accent"}
+            icon={<MailIcon width={16} height={16} />}
+          />
+          <StatCard
+            label="پایبندی ۷ روز"
+            value={adherence?.total ? `${toFa(Math.round((adherence.taken / adherence.total) * 100))}٪` : "—"}
+            hint="مصرف به‌موقع دارو"
+            tone="success"
+            icon={<SparkIcon width={16} height={16} />}
+          />
         </div>
-      </header>
 
-      <main className="mx-auto max-w-2xl space-y-8 px-6 py-8">
-        <section
-          className="rounded-xl border border-border bg-surface p-4"
-          aria-live="polite"
-        >
-          <p className="text-sm">
-            {pendingTasks.length > 0
-              ? `${pendingTasks.length} کار باز داری. مهم‌ترینش رو اول انجام بده.`
-              : "هیچ کار بازی نداری. خیالت راحت باشه 🎉"}
-          </p>
-        </section>
+        <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+          <Section title="برنامه‌ی امروز">
+            {items === null ? (
+              <div className="card h-40 animate-pulse" />
+            ) : timeline.length === 0 ? (
+              <Empty>برای امروز چیزی زمان‌بندی نشده. یه یادآوری بساز یا داروهات رو اضافه کن.</Empty>
+            ) : (
+              <ol className="card divide-y divide-border overflow-hidden">
+                {timeline.map((row) =>
+                  row.kind === "dose" ? (
+                    <li key={`d-${row.dose.id}`} className="flex items-center gap-3 p-3.5">
+                      <span
+                        className="grid size-9 shrink-0 place-items-center rounded-xl text-white"
+                        style={{ background: row.dose.medications?.color ?? "var(--accent)" }}
+                      >
+                        <PillIcon width={18} height={18} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className={`font-medium ${row.dose.status === "taken" ? "text-muted line-through" : ""}`}>
+                          {row.dose.medications?.name}
+                          {row.dose.medications?.dosage && (
+                            <span className="text-sm font-normal text-muted"> · {row.dose.medications.dosage}</span>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted">
+                          {faTime(row.dose.scheduled_for)}
+                          {row.dose.status === "missed" && " · فراموش شد"}
+                          {row.dose.status === "skipped" && " · رد شد"}
+                        </div>
+                      </div>
+                      {row.dose.status === "taken" ? (
+                        <button className="btn btn-ghost text-xs" onClick={() => markDose(row.dose, "pending")}>
+                          برگرد
+                        </button>
+                      ) : (
+                        <button className="btn btn-primary text-xs" onClick={() => markDose(row.dose, "taken")}>
+                          خوردم
+                        </button>
+                      )}
+                    </li>
+                  ) : (
+                    <li key={`i-${row.item.id}`} className="flex items-center gap-3 p-3.5">
+                      <button
+                        aria-label={`انجام شد: ${row.item.content}`}
+                        onClick={() => finishItem(row.item)}
+                        className="grid size-9 shrink-0 place-items-center rounded-xl border-2 border-border text-transparent transition hover:border-accent hover:text-accent"
+                      >
+                        <CheckIcon width={18} height={18} />
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium">{row.item.content}</div>
+                        <div
+                          className={`flex items-center gap-1 text-xs ${
+                            row.item.due_at! < new Date().toISOString() ? "text-danger" : "text-muted"
+                          }`}
+                        >
+                          <ClockIcon width={12} height={12} />
+                          {faWhen(row.item.due_at!)}
+                        </div>
+                      </div>
+                    </li>
+                  ),
+                )}
+              </ol>
+            )}
+          </Section>
 
-        <QuickCapture onAdd={addItem} />
-
-        {items.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-border py-10 text-center text-sm text-muted">
-            هنوز چیزی ثبت نکردی. از بالا شروع کن.
-          </p>
-        ) : (
-          <div className="space-y-6">
-            {KIND_ORDER.map((kind) => {
-              const group = items.filter((i) => i.kind === kind);
-              if (group.length === 0) return null;
-              return (
-                <section key={kind} className="space-y-2">
-                  <h2 className="text-sm font-semibold text-muted">
-                    {KIND_LABELS[kind]} ({group.length})
-                  </h2>
-                  <ul className="space-y-2">
-                    {group.map((item) => (
-                      <ItemRow
-                        key={item.id}
-                        content={item.content}
-                        done={item.done}
-                        onToggle={(done) => toggleItem(item.id, done)}
-                      />
-                    ))}
-                  </ul>
-                </section>
-              );
-            })}
-          </div>
-        )}
-      </main>
-    </div>
+          <Section
+            title="خلاصه‌ی روز"
+            action={
+              <button
+                onClick={refreshBriefing}
+                disabled={briefingBusy}
+                className="btn btn-ghost px-2.5 py-1.5 text-xs"
+              >
+                <RefreshIcon width={14} height={14} className={briefingBusy ? "animate-spin" : ""} />
+                {briefingBusy ? "در حال نوشتن…" : "بروزرسانی"}
+              </button>
+            }
+          >
+            <div className="card relative overflow-hidden p-5">
+              <div className="gradient-accent pointer-events-none absolute -top-16 -left-16 size-40 rounded-full opacity-20 blur-2xl" />
+              {briefing ? (
+                <>
+                  <div className="mb-2 text-xs text-muted">{faDate(briefing.day)}</div>
+                  <Markdownish text={briefing.content} />
+                </>
+              ) : (
+                <p className="text-sm leading-7 text-muted">
+                  هر صبح ایجنت یه خلاصه از کارها، داروها و ایمیل‌های مهمت می‌نویسه. الان هم می‌تونی با
+                  «بروزرسانی» بسازیش.
+                </p>
+              )}
+            </div>
+            {doses.length > 0 && (
+              <div className="card flex items-center gap-4 p-4">
+                <ProgressRing value={takenToday} total={doses.length} label="دوز امروز" />
+                <div className="text-sm leading-6 text-muted">
+                  {takenToday === doses.length
+                    ? "همه‌ی داروهای امروز رو خوردی. عالیه! 🎉"
+                    : `${toFa(doses.length - takenToday)} دوز دیگه مونده.`}
+                  <Link href="/meds/" className="mt-1 block text-accent">مدیریت داروها ←</Link>
+                </div>
+              </div>
+            )}
+          </Section>
+        </div>
+      </div>
+    </AppShell>
   );
 }
