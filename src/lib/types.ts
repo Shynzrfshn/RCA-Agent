@@ -71,6 +71,10 @@ export type Profile = {
   timezone: string;
   briefing_hour: number;
   briefing_enabled: boolean;
+  evening_hour: number;
+  evening_enabled: boolean;
+  weekly_day: number;
+  nudges_enabled: boolean;
 };
 
 export const KIND_LABELS: Record<ItemKind, string> = {

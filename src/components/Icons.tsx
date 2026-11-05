@@ -71,8 +71,10 @@ export function LogoMark(p: P) {
           <stop offset="1" stopColor="var(--accent-2)" />
         </linearGradient>
       </defs>
-      <rect width="32" height="32" rx="9" fill={`url(#${gid})`} />
-      <path d="M10 21V11h6a3.5 3.5 0 0 1 0 7h-6m6 0 4 3" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+      <rect width="32" height="32" rx="8" fill={`url(#${gid})`} />
+      {/* R monogram + AI spark (same geometry as public/icon.svg, 512 → 32) */}
+      <path d="M9.25 24V11H15a4.375 4.375 0 0 1 0 8.75H9.25m5.75 0 5.125 4.5" fill="none" stroke="#fff" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M23.875 6Q23.875 9.375 27.25 9.375Q23.875 9.375 23.875 12.75Q23.875 9.375 20.5 9.375Q23.875 9.375 23.875 6Z" fill="#fff" />
     </svg>
   );
 }

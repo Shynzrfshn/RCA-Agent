@@ -1,8 +1,8 @@
 // POST { message: string }  -> chat with the agent (tool use)
-// POST { action: "briefing" } -> (re)generate today's briefing
+// POST { action: "briefing", kind?: "morning" | "evening" | "weekly" } -> (re)generate a review
 import { HttpError, json, serve } from "../_shared/http.ts";
 import { adminClient, requireUser } from "../_shared/supabase.ts";
-import { generateBriefing, loadProfile, runAgent } from "../_shared/agent.ts";
+import { generateReview, loadProfile, runAgent, type ReviewKind } from "../_shared/agent.ts";
 import { localParts } from "../_shared/time.ts";
 import type { ChatMessage } from "../_shared/llm.ts";
 
@@ -13,13 +13,14 @@ serve(async (req) => {
   const body = await req.json().catch(() => ({}));
 
   if (body.action === "briefing") {
-    const content = await generateBriefing(db, user.id);
+    const kind: ReviewKind = ["morning", "evening", "weekly"].includes(body.kind) ? body.kind : "morning";
+    const content = await generateReview(db, user.id, kind);
     const { timezone } = await loadProfile(db, user.id);
     const day = localParts(timezone).date;
     await admin
       .from("briefings")
-      .upsert({ user_id: user.id, day, content }, { onConflict: "user_id,day" });
-    return json({ day, content });
+      .upsert({ user_id: user.id, day, kind, content }, { onConflict: "user_id,day,kind" });
+    return json({ day, kind, content });
   }
 
   const message = typeof body.message === "string" ? body.message.trim() : "";

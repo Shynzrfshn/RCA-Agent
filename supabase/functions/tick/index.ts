@@ -6,7 +6,21 @@ import { adminClient } from "../_shared/supabase.ts";
 import { pushToUser } from "../_shared/push.ts";
 import { sign } from "../_shared/crypto.ts";
 import { faTime, localParts } from "../_shared/time.ts";
-import { generateBriefing } from "../_shared/agent.ts";
+import { generateReview, type ReviewKind } from "../_shared/agent.ts";
+import { computeNudges } from "../_shared/nudges.ts";
+
+type ProfileRow = {
+  user_id: string;
+  timezone: string;
+  briefing_hour: number;
+  briefing_enabled: boolean;
+  evening_hour: number;
+  evening_enabled: boolean;
+  weekly_day: number;
+  nudges_enabled: boolean;
+};
+type LP = ReturnType<typeof localParts>;
+const DOW: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
 const RENOTIFY_MINUTES = 15;
 const MAX_NOTIFIES = 3;
@@ -16,13 +30,13 @@ serve(async (req) => {
   if (!isCron(req)) throw new HttpError(401, "unauthorized");
   const admin = adminClient();
   const now = new Date();
-  const stats = { doses: 0, missed: 0, items: 0, refills: 0, briefings: 0 };
+  const stats = { doses: 0, missed: 0, items: 0, refills: 0, briefings: 0, nudges: 0 };
 
   await admin.rpc("ensure_dose_logs", { p_days: 2, p_user: null });
 
   const { data: profiles } = await admin
     .from("profiles")
-    .select("user_id, timezone, briefing_hour, briefing_enabled");
+    .select("user_id, timezone, briefing_hour, briefing_enabled, evening_hour, evening_enabled, weekly_day, nudges_enabled");
   const tzOf = new Map((profiles ?? []).map((p) => [p.user_id, p.timezone as string]));
   const tz = (uid: string) => tzOf.get(uid) ?? "Asia/Tehran";
 
@@ -118,36 +132,56 @@ serve(async (req) => {
     stats.refills++;
   }
 
-  // 5) Morning briefing at each user's chosen local hour (max 3 per tick).
-  for (const p of profiles ?? []) {
-    if (!p.briefing_enabled || stats.briefings >= 3) continue;
+  // 5) Morning briefing, evening review, weekly review at each user's local
+  //    hours (max 3 generations per tick; each is one LLM call).
+  const KINDS: { kind: ReviewKind; title: string; due: (p: ProfileRow, lp: LP) => boolean }[] = [
+    { kind: "morning", title: "☀️ خلاصه‌ی امروزت آماده‌ست", due: (p, lp) => p.briefing_enabled && lp.hour === p.briefing_hour },
+    { kind: "evening", title: "🌙 مرور امروز و برنامه‌ی فردا", due: (p, lp) => p.evening_enabled && lp.hour === p.evening_hour },
+    { kind: "weekly", title: "📊 مرور هفتگی‌ات آماده‌ست", due: (p, lp) => p.evening_enabled && lp.hour === p.evening_hour && DOW[lp.weekday] === p.weekly_day },
+  ];
+  for (const p of (profiles ?? []) as ProfileRow[]) {
     const lp = localParts(p.timezone);
-    if (lp.hour !== p.briefing_hour) continue;
-    const { data: existing } = await admin
-      .from("briefings")
-      .select("id")
-      .eq("user_id", p.user_id)
-      .eq("day", lp.date)
-      .maybeSingle();
-    if (existing) continue;
-    // Claim the slot first so overlapping ticks don't double-generate.
-    const { error: claimErr } = await admin
-      .from("briefings")
-      .insert({ user_id: p.user_id, day: lp.date, content: "در حال آماده‌سازی…" });
-    if (claimErr) continue;
+    for (const k of KINDS) {
+      if (stats.briefings >= 3 || !k.due(p, lp)) continue;
+      // Claim the slot first (unique user/day/kind) so overlapping ticks don't double-generate.
+      const { error: claimErr } = await admin
+        .from("briefings")
+        .insert({ user_id: p.user_id, day: lp.date, kind: k.kind, content: "در حال آماده‌سازی…" });
+      if (claimErr) continue;
+      try {
+        const content = await generateReview(admin, p.user_id, k.kind);
+        await admin.from("briefings").update({ content })
+          .eq("user_id", p.user_id).eq("day", lp.date).eq("kind", k.kind);
+        await pushToUser(admin, p.user_id, {
+          title: k.title,
+          body: content.replace(/[#*_`>]/g, "").slice(0, 140),
+          url: "/dashboard/",
+          tag: `${k.kind}-${lp.date}`,
+        });
+        stats.briefings++;
+      } catch (err) {
+        console.error("review failed", k.kind, p.user_id, err);
+        await admin.from("briefings").delete()
+          .eq("user_id", p.user_id).eq("day", lp.date).eq("kind", k.kind);
+      }
+    }
+
+    // 6) Proactive nudges every 30 minutes, 10:00–20:59 local, max 2 pushes per day.
+    if (!p.nudges_enabled || lp.minute % 30 !== 0 || lp.hour < 10 || lp.hour > 20) continue;
     try {
-      const content = await generateBriefing(admin, p.user_id);
-      await admin.from("briefings").update({ content }).eq("user_id", p.user_id).eq("day", lp.date);
-      await pushToUser(admin, p.user_id, {
-        title: "☀️ خلاصه‌ی امروزت آماده‌ست",
-        body: content.replace(/[#*_`>]/g, "").slice(0, 140),
-        url: "/dashboard/",
-        tag: `briefing-${lp.date}`,
-      });
-      stats.briefings++;
+      const { count: sentToday } = await admin.from("nudges")
+        .select("id", { count: "exact", head: true }).eq("user_id", p.user_id).eq("day", lp.date);
+      let budget = 2 - (sentToday ?? 0);
+      for (const n of await computeNudges(admin, p.user_id, p.timezone)) {
+        if (budget <= 0) break;
+        const { error } = await admin.from("nudges").insert({ user_id: p.user_id, day: lp.date, ...n });
+        if (error) continue; // already nudged about this today
+        await pushToUser(admin, p.user_id, { title: n.title, body: n.body, url: n.url, tag: `nudge-${n.key}` });
+        stats.nudges++;
+        budget--;
+      }
     } catch (err) {
-      console.error("briefing failed", p.user_id, err);
-      await admin.from("briefings").delete().eq("user_id", p.user_id).eq("day", lp.date);
+      console.error("nudges failed", p.user_id, err);
     }
   }
 

@@ -65,6 +65,10 @@ export default function SettingsPage() {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Tehran",
         briefing_hour: 7,
         briefing_enabled: true,
+        evening_hour: 21,
+        evening_enabled: true,
+        weekly_day: 5,
+        nudges_enabled: true,
       },
     );
     setAccounts((a.data as EmailAccount[]) ?? []);
@@ -151,7 +155,7 @@ export default function SettingsPage() {
         )}
         {error && <ErrorNote>{error}</ErrorNote>}
 
-        <Section title="پروفایل و خلاصه‌ی صبحگاهی">
+        <Section title="پروفایل و ایجنت پیش‌دستانه">
           {profile && (
             <form onSubmit={saveProfile} className="card space-y-4 p-5">
               <div className="grid gap-3 sm:grid-cols-2">
@@ -201,6 +205,48 @@ export default function SettingsPage() {
                   ))}
                 </select>
               </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={profile.evening_enabled ?? true}
+                    onChange={(e) => setProfile({ ...profile, evening_enabled: e.target.checked })}
+                    className="accent-[var(--accent)]"
+                  />
+                  مرور شب و برنامه‌ی فردا، ساعت
+                </label>
+                <label htmlFor={`${ids.hour}-eve`} className="sr-only">ساعت مرور شب</label>
+                <select
+                  id={`${ids.hour}-eve`}
+                  className="field w-24 py-1.5"
+                  value={profile.evening_hour ?? 21}
+                  onChange={(e) => setProfile({ ...profile, evening_hour: Number(e.target.value) })}
+                >
+                  {Array.from({ length: 24 }, (_, h) => (
+                    <option key={h} value={h}>{toFa(h)}:۰۰</option>
+                  ))}
+                </select>
+                <label htmlFor={`${ids.hour}-wk`} className="text-sm">مرور هفتگی</label>
+                <select
+                  id={`${ids.hour}-wk`}
+                  className="field w-28 py-1.5"
+                  value={profile.weekly_day ?? 5}
+                  onChange={(e) => setProfile({ ...profile, weekly_day: Number(e.target.value) })}
+                >
+                  {["یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه"].map((d, i) => (
+                    <option key={i} value={i}>{d}</option>
+                  ))}
+                </select>
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={profile.nudges_enabled ?? true}
+                  onChange={(e) => setProfile({ ...profile, nudges_enabled: e.target.checked })}
+                  className="accent-[var(--accent)]"
+                />
+                ایجنت خودش پیشنهاد بده (کار عقب‌افتاده، دوز جامونده، ایمیل فوری؛ حداکثر ۲ بار در روز)
+              </label>
               <div className="flex justify-end">
                 <button type="submit" className="btn btn-primary">{saved ? "ذخیره شد ✓" : "ذخیره"}</button>
               </div>

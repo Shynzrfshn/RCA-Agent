@@ -3,26 +3,22 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
-import { CheckIcon, ClockIcon, MailIcon, PillIcon, RefreshIcon, SparkIcon } from "@/components/Icons";
-import { Empty, ErrorNote, Markdownish, ProgressRing, Section, StatCard } from "@/components/ui";
-import { callFunction } from "@/lib/api";
+import { CheckIcon, ClockIcon, MailIcon, PillIcon, SparkIcon } from "@/components/Icons";
+import { Empty, ErrorNote, ProgressRing, Section, StatCard } from "@/components/ui";
 import { completeItem, loadDoses, loadOpenItems, setDoseStatus, todayBounds } from "@/lib/data";
 import { faDate, faTime, faWhen, greeting, toFa } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
 import type { Dose, Item } from "@/lib/types";
 import SmartCapture from "./SmartCapture";
-
-type Briefing = { day: string; content: string };
+import { NudgesCard, ReviewsCard } from "./AgentPanels";
 
 export default function DashboardPage() {
   const supabase = createClient();
   const [items, setItems] = useState<Item[] | null>(null);
   const [doses, setDoses] = useState<Dose[]>([]);
-  const [briefing, setBriefing] = useState<Briefing | null>(null);
   const [urgentMail, setUrgentMail] = useState(0);
   const [adherence, setAdherence] = useState<{ taken: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [briefingBusy, setBriefingBusy] = useState(false);
 
   const load = useCallback(async () => {
     const { start, end } = todayBounds();
@@ -34,13 +30,6 @@ export default function DashboardPage() {
     }
     // The rest needs the v2 migration; fail soft.
     loadDoses(start, end).then(setDoses, () => setDoses([]));
-    supabase
-      .from("briefings")
-      .select("day, content")
-      .order("day", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => setBriefing(data));
     supabase
       .from("emails")
       .select("id", { count: "exact", head: true })
@@ -99,24 +88,14 @@ export default function DashboardPage() {
     }
   }
 
-  async function refreshBriefing() {
-    setBriefingBusy(true);
-    setError(null);
-    try {
-      setBriefing(await callFunction<Briefing>("agent", { action: "briefing" }));
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBriefingBusy(false);
-    }
-  }
-
   return (
     <AppShell title={`${greeting()} 👋`} subtitle={faDate(new Date(), { year: "numeric" })}>
       <div className="space-y-8">
         {error && <ErrorNote>{error}</ErrorNote>}
 
         <SmartCapture onChanged={load} />
+
+        <NudgesCard />
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard
@@ -216,33 +195,8 @@ export default function DashboardPage() {
             )}
           </Section>
 
-          <Section
-            title="خلاصه‌ی روز"
-            action={
-              <button
-                onClick={refreshBriefing}
-                disabled={briefingBusy}
-                className="btn btn-ghost px-2.5 py-1.5 text-xs"
-              >
-                <RefreshIcon width={14} height={14} className={briefingBusy ? "animate-spin" : ""} />
-                {briefingBusy ? "در حال نوشتن…" : "بروزرسانی"}
-              </button>
-            }
-          >
-            <div className="card relative overflow-hidden p-5">
-              <div className="gradient-accent pointer-events-none absolute -top-16 -left-16 size-40 rounded-full opacity-20 blur-2xl" />
-              {briefing ? (
-                <>
-                  <div className="mb-2 text-xs text-muted">{faDate(briefing.day)}</div>
-                  <Markdownish text={briefing.content} />
-                </>
-              ) : (
-                <p className="text-sm leading-7 text-muted">
-                  هر صبح ایجنت یه خلاصه از کارها، داروها و ایمیل‌های مهمت می‌نویسه. الان هم می‌تونی با
-                  «بروزرسانی» بسازیش.
-                </p>
-              )}
-            </div>
+          <Section title="مرور ایجنت">
+            <ReviewsCard />
             {doses.length > 0 && (
               <div className="card flex items-center gap-4 p-4">
                 <ProgressRing value={takenToday} total={doses.length} label="دوز امروز" />
