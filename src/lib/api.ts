@@ -29,4 +29,5 @@ export async function callFunction<T>(
 export type AgentReply = { reply: string; actions: { tool: string; ok: boolean }[] };
 
 export const askAgent = (message: string, image?: string) =>
-  callFunction<AgentReply>("agent", image ? { message, image } : { message });
+  callFunction<AgentReply>("agent", image ? { message, image, request_id: crypto.randomUUID() } : { message, request_id: crypto.randomUUID() });
+
