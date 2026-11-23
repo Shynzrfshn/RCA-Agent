@@ -20,9 +20,9 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run test:llm
-      - run: npx tsc --noEmit
       - run: npm run build
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+      - run: npx tsc --noEmit
 
