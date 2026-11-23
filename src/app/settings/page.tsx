@@ -70,6 +70,7 @@ export default function SettingsPage() {
         evening_enabled: true,
         weekly_day: 5,
         nudges_enabled: true,
+        ai_sensitive_enabled: false,
       },
     );
     setAccounts((a.data as EmailAccount[]) ?? []);
@@ -248,6 +249,12 @@ export default function SettingsPage() {
                 />
                 ایجنت خودش پیشنهاد بده (کار عقب‌افتاده، دوز جامونده، ایمیل فوری؛ حداکثر ۲ بار در روز)
               </label>
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" checked={profile.ai_sensitive_enabled ?? false}
+                  onChange={(e) => setProfile({ ...profile, ai_sensitive_enabled: e.target.checked })}
+                  className="mt-1 accent-[var(--accent)]" />
+                اجازه می‌دهم محتوای ایمیل، دارو، کارها و حافظه برای پاسخ ایجنت و خلاصه‌ها به سرویس‌های هوش مصنوعی فعال ارسال شود. با خاموش‌بودن، تحلیل ایمیل و خلاصه‌های خودکار انجام نمی‌شود.
+              </label>
               <div className="flex justify-end">
                 <button type="submit" className="btn btn-primary">{saved ? "ذخیره شد ✓" : "ذخیره"}</button>
               </div>
@@ -340,3 +347,4 @@ export default function SettingsPage() {
     </AppShell>
   );
 }
+

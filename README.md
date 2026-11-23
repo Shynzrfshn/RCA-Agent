@@ -93,8 +93,27 @@ npm run dev
 - مدل با `LLM_MODEL` و `LLM_BASE_URL` قابل تغییره؛ هر API سازگار با OpenAI کار می‌کنه (OpenRouter، API رسمی DeepSeek با `https://api.deepseek.com` و `deepseek-v4-flash`، و غیره).
 
 ## مدل (OpenRouter)
+
+### چند ارائه‌دهنده و انتقال خودکار
+
+در Supabase Secrets کلیدهای هر سرویس را جدا ثبت کن. بدون کلید، آن سرویس از فهرست حذف می‌شود:
+
+| سرویس | Secretهای لازم | مدل پیش‌فرض |
+|---|---|---|
+| OpenRouter | `LLM_API_KEY` | `LLM_MODEL=nvidia/nemotron-3.5-super-vl:free` |
+| Google Gemini | `GEMINI_API_KEY` | `GEMINI_MODEL=gemini-2.5-flash-lite` |
+| Groq | `GROQ_API_KEY` | `GROQ_MODEL=openai/gpt-oss-20b` |
+| Cloudflare Workers AI | `CLOUDFLARE_API_KEY`, `CLOUDFLARE_ACCOUNT_ID` | `CLOUDFLARE_MODEL=@cf/meta/llama-3.1-8b-instruct` |
+
+`LLM_PROVIDER_ORDER=openrouter,gemini,groq,cloudflare` ترتیب را تعیین می‌کند. برای عکس فقط سرویس‌های دارای vision، و برای tool calling فقط سرویس‌های سازگار انتخاب می‌شوند. هر درخواست ۲۲ ثانیه timeout دارد؛ خطای سهمیه، سرویس را موقتاً کنار می‌گذارد. محدودیت‌های رایگان و مدل‌ها تغییر می‌کنند؛ قبل از استقرار، دسترسی حساب و پشتیبانی از قابلیت‌ها را با درخواست آزمایشی بررسی کن. اطلاعات شخصی، ایمیل و دارو به سرویس‌های فعال فرستاده می‌شود؛ فقط ارائه‌دهندگانی را فعال کن که سیاست داده‌شان را پذیرفته‌ای.
+
+مهاجرت `supabase/migrations/20261123000000_email_idempotency.sql` را پیش از deploy کردن `gmail-sync` اجرا کن. اگر پیش‌تر برای یک ایمیل task تکراری ساخته شده، داده‌های تکراری باید پیش از ایجاد index پاک‌سازی شوند.
+سپس مهاجرت‌های `20261123000001_ai_consent.sql`، `20261123000002_agent_turns.sql` و `20261123000003_gmail_lease.sql` را به‌ترتیب اجرا کن. رضایت ارسال دادهٔ حساس به AI برای همه در ابتدا خاموش است؛ در تنظیمات برنامه می‌توان آن را فعال کرد. بدون این رضایت، چت، تحلیل ایمیل و خلاصه‌های AI غیرفعال می‌مانند، ولی یادآورها و ثبت دارو مستقل کار می‌کنند.
+
+برای بررسی تغییرات پیش از deploy، `npm run lint`، `npm run test:llm` و `npx tsc --noEmit` را اجرا کن. تست LLM با پاسخ ساختگی، انتقال از OpenRouterِ محدودشده به Gemini را بررسی می‌کند؛ کلید واقعی و سهمیهٔ حساب را آزمایش نمی‌کند. همگام‌سازی Gmail در هر اجرا حداکثر ۱۰ ایمیل جدید را پردازش می‌کند تا زمان اجرای تابع کنترل شود.
 - پیش‌فرض: `nvidia/nemotron-3.5-super-vl:free` (رایگان، tool calling و فارسی خوب؛ تست شده در ۱۴ آبان ۱۴۰۵).
 - DeepSeek V4 دیگه نسخه‌ی رایگان نداره. با شارژ حساب OpenRouter (حتی ۵ دلار برای ماه‌ها کافیه) بذار:
   `LLM_MODEL=deepseek/deepseek-v4.1-flash`
 - مدل‌های رایگان سقف روزانه دارن و گاهی شلوغ می‌شن؛ ایجنت در خطای 429 خودش دوباره تلاش می‌کنه.
 - بعد از هر تغییر: `npx supabase secrets set --env-file supabase/functions/.env`
+

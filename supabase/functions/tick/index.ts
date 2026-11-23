@@ -18,6 +18,7 @@ type ProfileRow = {
   evening_enabled: boolean;
   weekly_day: number;
   nudges_enabled: boolean;
+  ai_sensitive_enabled: boolean;
 };
 type LP = ReturnType<typeof localParts>;
 const DOW: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
@@ -36,7 +37,7 @@ serve(async (req) => {
 
   const { data: profiles } = await admin
     .from("profiles")
-    .select("user_id, timezone, briefing_hour, briefing_enabled, evening_hour, evening_enabled, weekly_day, nudges_enabled");
+    .select("user_id, timezone, briefing_hour, briefing_enabled, evening_hour, evening_enabled, weekly_day, nudges_enabled, ai_sensitive_enabled");
   const tzOf = new Map((profiles ?? []).map((p) => [p.user_id, p.timezone as string]));
   const tz = (uid: string) => tzOf.get(uid) ?? "Asia/Tehran";
 
@@ -142,7 +143,7 @@ serve(async (req) => {
   for (const p of (profiles ?? []) as ProfileRow[]) {
     const lp = localParts(p.timezone);
     for (const k of KINDS) {
-      if (stats.briefings >= 3 || !k.due(p, lp)) continue;
+      if (stats.briefings >= 3 || !p.ai_sensitive_enabled || !k.due(p, lp)) continue;
       // Claim the slot first (unique user/day/kind) so overlapping ticks don't double-generate.
       const { error: claimErr } = await admin
         .from("briefings")
@@ -187,3 +188,4 @@ serve(async (req) => {
 
   return json(stats);
 });
+

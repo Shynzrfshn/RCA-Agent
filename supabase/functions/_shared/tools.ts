@@ -9,6 +9,30 @@ type Input = Record<string, unknown>;
 
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+const uuid = (v: unknown) => {
+  const value = str(v);
+  if (!value || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) throw new Error("valid id required");
+  return value;
+};
+const bounded = (v: unknown, max: number) => {
+  const value = str(v);
+  if (!value || value.length > max) throw new Error(`text must be 1-${max} characters`);
+  return value;
+};
+const dateTime = (v: unknown) => {
+  const value = str(v);
+  if (!value || !/^\d{4}-\d\d-\d\dT\d\d:\d\d/.test(value) || !/(Z|[+-]\d\d:\d\d)$/.test(value) || Number.isNaN(Date.parse(value))) throw new Error("valid ISO date with timezone required");
+  return value;
+};
+const times = (v: unknown) => {
+  if (!Array.isArray(v) || !v.length || v.length > 8 || !v.every((x) => typeof x === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(x))) throw new Error("1-8 valid HH:MM times required");
+  return [...new Set(v)];
+};
+const nonnegative = (v: unknown) => {
+  const value = num(v);
+  if (value === undefined || value < 0) throw new Error("nonnegative number required");
+  return value;
+};
 
 function must<T>(res: { data: T; error: { message: string } | null }): T {
   if (res.error) throw new Error(res.error.message);
@@ -204,8 +228,7 @@ export async function runTool(name: string, input: Input, ctx: ToolCtx): Promise
     }
 
     case "create_item": {
-      const content = str(input.content);
-      if (!content) throw new Error("content is required");
+      const content = bounded(input.content, 2000);
       return must(
         await db
           .from("items")
@@ -213,7 +236,7 @@ export async function runTool(name: string, input: Input, ctx: ToolCtx): Promise
             user_id: userId,
             kind: str(input.kind) ?? "task",
             content,
-            due_at: str(input.due_at) ?? null,
+            due_at: input.due_at === undefined ? null : dateTime(input.due_at),
             priority: num(input.priority) ?? 1,
             recurrence: str(input.recurrence) ?? null,
             source: "agent",
@@ -225,9 +248,9 @@ export async function runTool(name: string, input: Input, ctx: ToolCtx): Promise
 
     case "update_item": {
       const patch: Input = {};
-      if (str(input.content)) patch.content = str(input.content);
+      if (input.content !== undefined) patch.content = bounded(input.content, 2000);
       if (typeof input.due_at === "string") {
-        patch.due_at = input.due_at || null;
+        patch.due_at = input.due_at ? dateTime(input.due_at) : null;
         patch.notified_at = null;
       }
       if (num(input.priority) !== undefined) patch.priority = input.priority;
@@ -236,7 +259,7 @@ export async function runTool(name: string, input: Input, ctx: ToolCtx): Promise
         await db
           .from("items")
           .update(patch)
-          .eq("id", str(input.id)!)
+          .eq("id", uuid(input.id))
           .eq("user_id", userId)
           .select("id, kind, content, due_at, priority, recurrence, done")
           .single(),
@@ -245,11 +268,11 @@ export async function runTool(name: string, input: Input, ctx: ToolCtx): Promise
 
     case "complete_item":
       return must(
-        await db.rpc("complete_item", { p_id: str(input.id), p_done: input.done !== false }),
+        await db.rpc("complete_item", { p_id: uuid(input.id), p_done: input.done !== false }),
       );
 
     case "delete_item":
-      must(await db.from("items").delete().eq("id", str(input.id)!).eq("user_id", userId));
+      must(await db.from("items").delete().eq("id", uuid(input.id)).eq("user_id", userId));
       return { deleted: true };
 
     case "list_medications": {
@@ -263,22 +286,21 @@ export async function runTool(name: string, input: Input, ctx: ToolCtx): Promise
     }
 
     case "add_medication": {
-      const times = Array.isArray(input.times) ? (input.times as string[]) : [];
-      if (!str(input.name) || times.length === 0) throw new Error("name and times are required");
+      const schedule = times(input.times);
       const med = must(
         await db
           .from("medications")
           .insert({
             user_id: userId,
-            name: str(input.name),
+            name: bounded(input.name, 200),
             dosage: str(input.dosage) ?? null,
             instructions: str(input.instructions) ?? null,
-            times,
+            times: schedule,
             days_of_week: Array.isArray(input.days_of_week) ? input.days_of_week : null,
             start_date: str(input.start_date) ?? undefined,
             end_date: str(input.end_date) ?? null,
-            stock: num(input.stock) ?? null,
-            dose_amount: num(input.dose_amount) ?? 1,
+            stock: input.stock === undefined ? null : nonnegative(input.stock),
+            dose_amount: input.dose_amount === undefined ? 1 : nonnegative(input.dose_amount),
           })
           .select("id, name, dosage, times, stock")
           .single(),
@@ -292,14 +314,14 @@ export async function runTool(name: string, input: Input, ctx: ToolCtx): Promise
       for (const k of ["name", "dosage", "instructions", "end_date"]) {
         if (typeof input[k] === "string") patch[k] = (input[k] as string) || null;
       }
-      for (const k of ["stock", "dose_amount"]) if (num(input[k]) !== undefined) patch[k] = input[k];
-      if (Array.isArray(input.times)) patch.times = input.times;
+      for (const k of ["stock", "dose_amount"]) if (input[k] !== undefined) patch[k] = nonnegative(input[k]);
+      if (input.times !== undefined) patch.times = times(input.times);
       if (typeof input.active === "boolean") patch.active = input.active;
       const med = must(
         await db
           .from("medications")
           .update(patch)
-          .eq("id", str(input.id)!)
+          .eq("id", uuid(input.id))
           .eq("user_id", userId)
           .select("id, name, times, stock, active")
           .single(),
@@ -309,7 +331,7 @@ export async function runTool(name: string, input: Input, ctx: ToolCtx): Promise
         await db
           .from("dose_logs")
           .delete()
-          .eq("medication_id", str(input.id)!)
+          .eq("medication_id", uuid(input.id))
           .eq("status", "pending")
           .gt("scheduled_for", new Date().toISOString());
       }
@@ -319,7 +341,7 @@ export async function runTool(name: string, input: Input, ctx: ToolCtx): Promise
 
     case "log_dose":
       return must(
-        await db.rpc("set_dose_status", { p_log: str(input.dose_id), p_status: str(input.status) }),
+        await db.rpc("set_dose_status", { p_log: uuid(input.dose_id), p_status: str(input.status) }),
       );
 
     case "medication_adherence":
@@ -347,13 +369,13 @@ export async function runTool(name: string, input: Input, ctx: ToolCtx): Promise
       return must(
         await db
           .from("memories")
-          .insert({ user_id: userId, content: str(input.content) })
+          .insert({ user_id: userId, content: bounded(input.content, 1000) })
           .select("id, content")
           .single(),
       );
 
     case "forget":
-      must(await db.from("memories").delete().eq("id", str(input.id)!).eq("user_id", userId));
+      must(await db.from("memories").delete().eq("id", uuid(input.id)).eq("user_id", userId));
       return { deleted: true };
 
     default:
@@ -399,3 +421,4 @@ export async function overview({ db, userId, tz }: ToolCtx) {
     unread_important_emails_untrusted: must(emails),
   };
 }
+

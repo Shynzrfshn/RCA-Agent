@@ -79,7 +79,23 @@ serve(async (req) => {
 
   const report: Record<string, number | string> = {};
   for (const acc of accounts ?? []) {
+    const now = new Date();
+    const { data: claimed, error: leaseError } = await admin.from("email_accounts")
+      .update({ sync_claim_until: new Date(now.getTime() + 4 * 60_000).toISOString() })
+      .eq("id", acc.id)
+      .or(`sync_claim_until.is.null,sync_claim_until.lt.${now.toISOString()}`)
+      .select("id");
+    if (leaseError) throw leaseError;
+    if (!claimed?.length) continue;
     try {
+      const { data: profile, error: profileError } = await admin.from("profiles")
+        .select("ai_sensitive_enabled").eq("user_id", acc.user_id).single();
+      if (profileError) throw profileError;
+      if (!profile.ai_sensitive_enabled) {
+        report[acc.email] = "AI consent disabled";
+        await admin.from("email_accounts").update({ sync_claim_until: null }).eq("id", acc.id);
+        continue;
+      }
       // deno-lint-ignore no-explicit-any
       const cred = (acc as any).email_credentials;
       const enc = Array.isArray(cred) ? cred[0]?.refresh_token_enc : cred?.refresh_token_enc;
@@ -92,6 +108,7 @@ serve(async (req) => {
       const ids = await listMessageIds(
         access_token,
         since ? `in:inbox after:${since}` : "in:inbox newer_than:3d",
+        500,
       );
       const { data: known } = await admin
         .from("emails")
@@ -99,16 +116,18 @@ serve(async (req) => {
         .eq("account_id", acc.id)
         .in("provider_id", ids.length ? ids : ["-"]);
       const knownSet = new Set((known ?? []).map((k) => k.provider_id));
-      const fresh = ids.filter((id) => !knownSet.has(id));
+      // Bound each invocation; remaining messages are discovered next run.
+      const fresh = ids.filter((id) => !knownSet.has(id)).slice(0, 10);
 
-      const metas = await Promise.all(fresh.map((id) => getMessageMeta(access_token, id)));
+      const metas: GmailMeta[] = [];
+      for (const id of fresh) metas.push(await getMessageMeta(access_token, id));
       const triaged = metas.length ? await triage(metas) : [];
       const byId = new Map(triaged.map((t) => [t.id, t]));
 
       let urgent = 0;
       for (const m of metas) {
         const t = byId.get(m.id);
-        await admin.from("emails").upsert(
+        const { error: emailError } = await admin.from("emails").upsert(
           {
             user_id: acc.user_id,
             account_id: acc.id,
@@ -125,17 +144,19 @@ serve(async (req) => {
           },
           { onConflict: "account_id,provider_id" },
         );
+        if (emailError) throw emailError;
         if (t?.action_needed && t.task) {
           const due = t.task_due && !Number.isNaN(Date.parse(t.task_due)) ? t.task_due : null;
-          await admin.from("items").insert({
+          const { error: taskError } = await admin.from("items").upsert({
             user_id: acc.user_id,
             kind: "task",
             content: t.task,
             due_at: due,
             priority: t.category === "urgent" ? 3 : 2,
             source: "email",
-            source_ref: m.id,
-          });
+            source_ref: `${acc.id}:${m.id}`,
+          }, { onConflict: "user_id,source,source_ref", ignoreDuplicates: true });
+          if (taskError) throw taskError;
         }
         if (t?.category === "urgent") urgent++;
       }
@@ -151,17 +172,19 @@ serve(async (req) => {
           tag: "urgent-mail",
         });
       }
-      await admin
+      const { error: checkpointError } = await admin
         .from("email_accounts")
-        .update({ last_synced_at: new Date().toISOString(), last_error: null })
+        .update({ last_synced_at: fresh.length < 10 ? new Date().toISOString() : acc.last_synced_at, last_error: null, sync_claim_until: null })
         .eq("id", acc.id);
+      if (checkpointError) throw checkpointError;
       report[acc.email] = metas.length;
     } catch (err) {
       const msg = (err as Error).message;
       console.error("sync failed", acc.email, msg);
-      await admin.from("email_accounts").update({ last_error: msg }).eq("id", acc.id);
+      await admin.from("email_accounts").update({ last_error: msg, sync_claim_until: null }).eq("id", acc.id);
       report[acc.email] = `error: ${msg}`;
     }
   }
   return json({ synced: report });
 });
+
