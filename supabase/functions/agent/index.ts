@@ -11,6 +11,8 @@ serve(async (req) => {
   const { user, db } = await requireUser(req);
   const admin = adminClient();
   const body = await req.json().catch(() => ({}));
+  const { ai_sensitive_enabled } = await loadProfile(db, user.id);
+  if (!ai_sensitive_enabled) throw new HttpError(403, "ai_sensitive_consent_required");
 
   if (body.action === "briefing") {
     const kind: ReviewKind = ["morning", "evening", "weekly"].includes(body.kind) ? body.kind : "morning";
@@ -31,7 +33,18 @@ serve(async (req) => {
     throw new HttpError(400, "bad_image");
   }
   if (image && image.length > 3_000_000) throw new HttpError(413, "image_too_large");
+  const requestId = typeof body.request_id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.request_id)
+    ? body.request_id : crypto.randomUUID();
+  const { error: claimError } = await admin.from("agent_turns").insert({ user_id: user.id, request_id: requestId });
+  if (claimError) {
+    if (claimError.code !== "23505") throw claimError;
+    const { data: existing } = await admin.from("agent_turns").select("result")
+      .eq("user_id", user.id).eq("request_id", requestId).single();
+    if (existing?.result) return json(existing.result);
+    throw new HttpError(409, "request_in_progress");
+  }
 
+  try {
   const { data: past } = await admin
     .from("agent_messages")
     .select("role, content")
@@ -48,6 +61,14 @@ serve(async (req) => {
   await admin
     .from("agent_messages")
     .insert({ user_id: user.id, role: "assistant", content: result.reply });
+  const { error: finishError } = await admin.from("agent_turns").update({ result })
+    .eq("user_id", user.id).eq("request_id", requestId);
+  if (finishError) throw finishError;
 
   return json(result);
+  } catch (err) {
+    // Keep the claim: the tool may already have changed data before a later failure.
+    throw err;
+  }
 });
+
