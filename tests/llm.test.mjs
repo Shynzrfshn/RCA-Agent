@@ -20,5 +20,13 @@ test("falls back to a second provider after a rate limit", async () => {
   assert.equal(result.message.content, "سلام");
   assert.match(calls[0], /openrouter/);
   assert.match(calls[1], /generativelanguage/);
+  values.delete("LLM_API_KEY");
+  values.delete("GEMINI_API_KEY");
+  values.set("GROQ_API_KEY", "groq-test");
+  await assert.rejects(
+    chat({ messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AA==" } }] }] }),
+    /No configured provider supports this request/,
+  );
+  assert.equal(calls.length, 2);
 });
 
