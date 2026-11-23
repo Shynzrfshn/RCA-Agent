@@ -26,12 +26,12 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run test:llm
-      - run: npx tsc --noEmit
       - run: npm run build
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${{ vars.NEXT_PUBLIC_VAPID_PUBLIC_KEY }}
+      - run: npx tsc --noEmit
       - uses: actions/upload-pages-artifact@v3
         with:
           path: out
