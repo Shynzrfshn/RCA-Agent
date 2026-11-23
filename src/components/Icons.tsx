@@ -1,4 +1,4 @@
-import { useId, type SVGProps } from "react";
+import type { SVGProps } from "react";
 
 type P = SVGProps<SVGSVGElement>;
 const base = (p: P) => ({
@@ -59,22 +59,21 @@ export const RepeatIcon = (p: P) => (
 export const RefreshIcon = (p: P) => (
   <svg {...base(p)}><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8" /><path d="M21 3v5h-5" /></svg>
 );
+export const SearchIcon = (p: P) => (
+  <svg {...base(p)}><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg>
+);
+export const EditIcon = (p: P) => (
+  <svg {...base(p)}><path d="m4 20 4.2-.9L20 7.3 16.7 4 4.9 15.8 4 20zM14.8 5.9l3.3 3.3" /></svg>
+);
+export const ArrowIcon = (p: P) => (
+  <svg {...base(p)}><path d="M19 12H5m7-7-7 7 7 7" /></svg>
+);
 export function LogoMark(p: P) {
-  // Unique id per instance: a gradient defined inside a hidden (display:none)
-  // copy of the logo would otherwise break every other copy.
-  const gid = `lg${useId().replace(/:/g, "")}`;
   return (
     <svg viewBox="0 0 32 32" width={28} height={28} aria-hidden {...p}>
-      <defs>
-        <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="var(--accent)" />
-          <stop offset="1" stopColor="var(--accent-2)" />
-        </linearGradient>
-      </defs>
-      <rect width="32" height="32" rx="8" fill={`url(#${gid})`} />
-      {/* R monogram + AI spark (same geometry as public/icon.svg, 512 → 32) */}
-      <path d="M9.25 24V11H15a4.375 4.375 0 0 1 0 8.75H9.25m5.75 0 5.125 4.5" fill="none" stroke="#fff" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M23.875 6Q23.875 9.375 27.25 9.375Q23.875 9.375 23.875 12.75Q23.875 9.375 20.5 9.375Q23.875 9.375 23.875 6Z" fill="#fff" />
+      <rect width="32" height="32" rx="7" fill="var(--foreground)" />
+      <path d="M8 23V9h8a5 5 0 0 1 0 10H8m8 0 6 4" fill="none" stroke="var(--surface)" strokeWidth="2.6" strokeLinecap="square" strokeLinejoin="round" />
+      <circle cx="23" cy="9" r="2" fill="var(--accent)" />
     </svg>
   );
 }

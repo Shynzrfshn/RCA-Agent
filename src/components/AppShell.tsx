@@ -48,21 +48,22 @@ export default function AppShell({
   }
 
   return (
-    <div className="min-h-screen md:grid md:grid-cols-[15rem_1fr]">
+    <div className="app-frame min-h-screen md:grid md:grid-cols-[16.5rem_1fr]">
       {/* Desktop sidebar (on the right, since the page is RTL) */}
-      <aside className="sticky top-0 hidden h-screen flex-col gap-1 border-l border-border bg-surface p-4 md:flex">
-        <Link href="/dashboard/" className="mb-6 flex items-center gap-2 px-2 pt-1">
-          <LogoMark />
-          <span className="text-lg font-bold">RCA Agent</span>
+      <aside className="app-sidebar sticky top-0 hidden h-screen flex-col gap-1 border-l border-border p-5 md:flex">
+        <Link href="/dashboard/" className="mb-11 flex items-center gap-3 px-2 pt-2">
+          <LogoMark width={36} height={36} />
+          <span className="flex flex-col leading-tight"><strong className="text-base tracking-tight">RCA<span className="font-normal">/Agent</span></strong><small className="mt-1 text-[10px] tracking-[.2em] text-muted" dir="ltr">PERSONAL SYSTEM</small></span>
         </Link>
+        <span className="mb-3 px-3 text-[10px] font-bold tracking-[.16em] text-muted">فضای کاری</span>
         {NAV.map(({ href, label, Icon }) => (
           <Link
             key={href}
             href={href}
             aria-current={isActive(href) ? "page" : undefined}
-            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+            className={`nav-link flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
               isActive(href)
-                ? "bg-accent-soft text-accent"
+                ? "is-active bg-accent-soft text-accent"
                 : "text-muted hover:bg-surface-2 hover:text-foreground"
             }`}
           >
@@ -70,33 +71,35 @@ export default function AppShell({
             {label}
           </Link>
         ))}
-        <div className="mt-auto truncate px-3 text-xs text-muted" dir="ltr">
-          {user.email}
+        <div className="mt-auto border-t border-border px-3 pt-5">
+          <span className="mb-1 block text-[10px] text-muted">حساب متصل</span>
+          <span className="block truncate text-xs" dir="ltr">{user.email}</span>
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-col pb-24 md:pb-10">
-        <header className="mx-auto flex w-full max-w-4xl items-end justify-between gap-4 px-4 pt-6 pb-4 sm:px-8 sm:pt-10">
+        <header className="mx-auto flex w-full max-w-6xl items-end justify-between gap-4 px-4 pt-7 pb-7 sm:px-8 sm:pt-12">
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{title}</h1>
-            {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
+            <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold tracking-[.12em] text-accent"><span className="size-1.5 rounded-full bg-accent" /> فضای شخصی / RCA</div>
+            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{title}</h1>
+            {subtitle && <p className="mt-2 text-sm leading-6 text-muted">{subtitle}</p>}
           </div>
           {action}
         </header>
-        <main className="mx-auto w-full max-w-4xl flex-1 px-4 sm:px-8">{children}</main>
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 sm:px-8">{children}</main>
       </div>
 
       {/* Mobile bottom nav */}
       <nav
         aria-label="ناوبری اصلی"
-        className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-6 border-t border-border bg-surface/90 px-1 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden"
+        className="mobile-nav fixed inset-x-0 bottom-0 z-20 grid grid-cols-6 border-t border-border bg-surface/95 px-1 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden"
       >
         {NAV.map(({ href, label, Icon }) => (
           <Link
             key={href}
             href={href}
             aria-current={isActive(href) ? "page" : undefined}
-            className={`flex flex-col items-center gap-0.5 rounded-lg py-1.5 text-[11px] ${
+            className={`flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-lg py-1.5 text-[11px] ${
               isActive(href) ? "text-accent" : "text-muted"
             }`}
           >

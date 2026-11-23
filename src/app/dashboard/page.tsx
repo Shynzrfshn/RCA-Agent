@@ -58,6 +58,7 @@ export default function DashboardPage() {
   );
   const overdue = dueToday.filter((i) => i.due_at! < new Date().toISOString());
   const takenToday = doses.filter((d) => d.status === "taken").length;
+  const missedDoses = doses.filter((d) => d.status === "missed").length;
 
   const timeline = useMemo(() => {
     const rows = [
@@ -89,11 +90,20 @@ export default function DashboardPage() {
   }
 
   return (
-    <AppShell title={`${greeting()} 👋`} subtitle={faDate(new Date(), { year: "numeric" })}>
+    <AppShell title={greeting()} subtitle={faDate(new Date(), { year: "numeric" })}>
       <div className="space-y-8">
         {error && <ErrorNote>{error}</ErrorNote>}
 
         <SmartCapture onChanged={load} />
+
+        {(overdue.length > 0 || missedDoses > 0 || urgentMail > 0) && <section className="card border-r-[3px] border-r-warning p-4 sm:p-5" aria-label="نیازمند توجه">
+          <div className="mb-3 flex items-center justify-between"><h2 className="font-bold">نیازمند توجه</h2><span className="text-xs text-muted">اولویت‌های همین حالا</span></div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {overdue.length > 0 && <Link href="/tasks/" className="flex min-h-12 items-center justify-between rounded-lg bg-danger-bg px-4 text-sm text-danger"><span>{toFa(overdue.length)} کار عقب‌افتاده</span><span aria-hidden>←</span></Link>}
+            {missedDoses > 0 && <Link href="/meds/" className="flex min-h-12 items-center justify-between rounded-lg bg-warning-soft px-4 text-sm text-warning"><span>{toFa(missedDoses)} دوز ثبت‌نشده</span><span aria-hidden>←</span></Link>}
+            {urgentMail > 0 && <Link href="/inbox/" className="flex min-h-12 items-center justify-between rounded-lg bg-accent-soft px-4 text-sm text-accent"><span>{toFa(urgentMail)} ایمیل فوری</span><span aria-hidden>←</span></Link>}
+          </div>
+        </section>}
 
         <NudgesCard />
 
@@ -202,7 +212,7 @@ export default function DashboardPage() {
                 <ProgressRing value={takenToday} total={doses.length} label="دوز امروز" />
                 <div className="text-sm leading-6 text-muted">
                   {takenToday === doses.length
-                    ? "همه‌ی داروهای امروز رو خوردی. عالیه! 🎉"
+                    ? "همهٔ دوزهای امروز ثبت شده‌اند."
                     : `${toFa(doses.length - takenToday)} دوز دیگه مونده.`}
                   <Link href="/meds/" className="mt-1 block text-accent">مدیریت داروها ←</Link>
                 </div>

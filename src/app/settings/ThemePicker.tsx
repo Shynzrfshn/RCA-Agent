@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { ACCENTS, applyAccent, applyTheme, getAccent, getTheme, type Accent, type ThemeMode } from "@/lib/theme";
 
 const MODES: { value: ThemeMode; label: string; icon: string }[] = [
-  { value: "system", label: "مثل سیستم", icon: "🖥️" },
-  { value: "light", label: "روشن", icon: "☀️" },
-  { value: "dark", label: "تیره", icon: "🌙" },
+  { value: "system", label: "مثل سیستم", icon: "◐" },
+  { value: "light", label: "روشن", icon: "○" },
+  { value: "dark", label: "تیره", icon: "●" },
 ];
 
 export default function ThemePicker() {

@@ -16,7 +16,7 @@ export async function loadDoses(fromIso: string, toIso: string): Promise<Dose[]>
   await db().rpc("ensure_my_doses").then(() => undefined, () => undefined);
   const { data, error } = await db()
     .from("dose_logs")
-    .select("id, medication_id, scheduled_for, status, taken_at, medications(name, dosage, instructions, color)")
+    .select("id, medication_id, scheduled_for, status, taken_at, snooze_until, medications(name, dosage, instructions, color)")
     .gte("scheduled_for", fromIso)
     .lt("scheduled_for", toIso)
     .order("scheduled_for");
@@ -51,8 +51,11 @@ export async function completeItem(id: string, done = true) {
 }
 
 export async function addItem(user_id: string, fields: Partial<Item> & { content: string }) {
-  const { error } = await db()
+  const { data, error } = await db()
     .from("items")
-    .insert({ user_id, kind: "task", ...fields });
+    .insert({ user_id, kind: "task", ...fields })
+    .select("id")
+    .single();
   if (error) throw error;
+  return data.id as string;
 }

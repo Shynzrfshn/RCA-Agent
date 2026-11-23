@@ -157,7 +157,15 @@ export default function SettingsPage() {
         )}
         {error && <ErrorNote>{error}</ErrorNote>}
 
-        <Section title="پروفایل و ایجنت پیش‌دستانه">
+        <section className="card p-5" aria-label="وضعیت راه‌اندازی">
+          <div className="mb-4 flex items-baseline justify-between gap-3"><h2 className="text-lg font-bold">وضعیت راه‌اندازی</h2><span className="text-xs text-muted">سه بخش اصلی</span></div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {[{ label: "اجازهٔ پردازش AI", ok: !!profile?.ai_sensitive_enabled, href: "#profile" }, { label: "اتصال Gmail", ok: accounts.length > 0, href: "#gmail" }, { label: "اعلان این دستگاه", ok: pushOn === true, href: "#notifications" }].map((step, i) => <a key={step.label} href={step.href} className="flex min-h-20 flex-col justify-between rounded-lg border border-border bg-surface-2 p-3 text-sm"><span className="text-xs text-muted" dir="ltr">0{i + 1}</span><span className="font-semibold">{step.label}</span><span className={`text-xs ${step.ok ? "text-success" : "text-warning"}`}>{step.ok ? "فعال" : "نیازمند تنظیم"}</span></a>)}
+          </div>
+          <p className="mt-4 text-xs leading-6 text-muted">قابلیت‌های پایه بدون پرداخت کار می‌کنند. استفاده از سرویس‌های AI به سهمیهٔ رایگان حساب‌های متصل وابسته است.</p>
+        </section>
+
+        <div id="profile"><Section title="پروفایل و ایجنت پیش‌دستانه">
           {profile && (
             <form onSubmit={saveProfile} className="card space-y-4 p-5">
               <div className="grid gap-3 sm:grid-cols-2">
@@ -260,13 +268,13 @@ export default function SettingsPage() {
               </div>
             </form>
           )}
-        </Section>
+        </Section></div>
 
         <Section title="ظاهر">
           <ThemePicker />
         </Section>
 
-        <Section title="اعلان‌ها">
+        <div id="notifications"><Section title="اعلان‌ها">
           <div className="card flex items-center gap-4 p-5">
             <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent">
               <BellIcon />
@@ -289,9 +297,9 @@ export default function SettingsPage() {
               </button>
             )}
           </div>
-        </Section>
+        </Section></div>
 
-        <Section title="حساب‌های ایمیل">
+        <div id="gmail"><Section title="حساب‌های ایمیل">
           <div className="card divide-y divide-border">
             {accounts.map((a) => (
               <div key={a.id} className="flex items-center gap-3 p-4">
@@ -318,7 +326,7 @@ export default function SettingsPage() {
               </button>
             </div>
           </div>
-        </Section>
+        </Section></div>
 
         <Section title="حافظه‌ی ایجنت">
           <div className="card p-4">
@@ -347,4 +355,3 @@ export default function SettingsPage() {
     </AppShell>
   );
 }
-

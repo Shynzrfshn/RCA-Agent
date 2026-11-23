@@ -67,7 +67,7 @@ export async function disablePush(): Promise<void> {
 
 export async function testNotification() {
   const reg = await navigator.serviceWorker.ready;
-  await reg.showNotification("🔔 RCA Agent", {
+  await reg.showNotification("RCA Agent", {
     body: "اعلان‌ها فعال‌اند. یادآوری‌ها و داروها این شکلی میان.",
     icon: `${BASE}/icon.svg`,
     lang: "fa",

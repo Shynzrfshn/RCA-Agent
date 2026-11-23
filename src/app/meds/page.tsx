@@ -23,6 +23,7 @@ export default function MedsPage() {
   const [meds, setMeds] = useState<Medication[] | null>(null);
   const [doses, setDoses] = useState<Dose[]>([]);
   const [stats, setStats] = useState<{ day: string; taken: number; total: number }[]>([]);
+  const [history, setHistory] = useState<Dose[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
@@ -45,6 +46,7 @@ export default function MedsPage() {
     const { start, end } = todayBounds();
     loadDoses(start, end).then(setDoses, (e) => setError(e.message));
     supabase.rpc("adherence", { p_days: 14 }).then(({ data }) => setStats((data as typeof stats) ?? []));
+    supabase.from("dose_logs").select("id, medication_id, scheduled_for, status, taken_at, medications(name, dosage, instructions, color)").lt("scheduled_for", start).gte("scheduled_for", new Date(Date.now() - 14 * 86400_000).toISOString()).in("status", ["taken", "skipped", "missed"]).order("scheduled_for", { ascending: false }).limit(20).then(({ data }) => setHistory((data as unknown as Dose[]) ?? []));
   }, [supabase]);
 
   useEffect(() => {
@@ -60,6 +62,14 @@ export default function MedsPage() {
     } catch (e) {
       setError((e as Error).message);
     }
+  }
+
+  async function snooze(d: Dose) {
+    // eslint-disable-next-line react-hooks/purity -- event handler, not render
+    const until = new Date(Date.now() + 15 * 60_000).toISOString();
+    const { error } = await supabase.from("dose_logs").update({ snooze_until: until, last_notified_at: null }).eq("id", d.id).eq("status", "pending");
+    if (error) setError(error.message);
+    else setDoses((prev) => prev.map((x) => x.id === d.id ? { ...x, snooze_until: until } : x));
   }
 
   async function stop(m: Medication) {
@@ -119,7 +129,7 @@ export default function MedsPage() {
                 <div className="mb-4 flex items-center gap-4">
                   <ProgressRing value={taken} total={doses.length} label="امروز" />
                   <p className="text-sm leading-6 text-muted">
-                    {taken === doses.length ? "همه رو خوردی! 💪" : `${toFa(doses.length - taken)} دوز باقی مونده`}
+                    {taken === doses.length ? "همهٔ دوزهای امروز ثبت شده‌اند." : `${toFa(doses.length - taken)} دوز باقی مانده`}
                   </p>
                 </div>
                 <ul className="divide-y divide-border">
@@ -132,17 +142,19 @@ export default function MedsPage() {
                         <span className={`rounded px-1.5 py-0.5 text-[11px] ${STATUS[d.status].cls}`}>
                           {STATUS[d.status].label}
                         </span>
+                        {d.snooze_until && new Date(d.snooze_until) > new Date() && <span className="mr-2 text-xs text-muted">یادآوری تا {faTime(d.snooze_until)}</span>}
                       </div>
                       {d.status === "taken" || d.status === "skipped" ? (
                         <button className="btn btn-ghost px-2.5 py-1.5 text-xs" onClick={() => mark(d, "pending")}>
                           برگرد
                         </button>
                       ) : (
-                        <div className="flex gap-1.5">
-                          <button className="btn btn-ghost px-2.5 py-1.5 text-xs" onClick={() => mark(d, "skipped")}>
+                        <div className="flex flex-wrap gap-1.5">
+                          <button className="btn btn-ghost px-2.5 text-xs" onClick={() => snooze(d)} disabled={!!d.snooze_until && new Date(d.snooze_until) > new Date()}>۱۵ دقیقه بعد</button>
+                          <button className="btn btn-ghost px-2.5 text-xs" onClick={() => mark(d, "skipped")}>
                             رد
                           </button>
-                          <button className="btn btn-primary px-2.5 py-1.5 text-xs" onClick={() => mark(d, "taken")}>
+                          <button className="btn btn-primary px-2.5 text-xs" onClick={() => mark(d, "taken")}>
                             خوردم
                           </button>
                         </div>
@@ -223,6 +235,9 @@ export default function MedsPage() {
               })}
             </ul>
           )}
+        </Section>
+        <Section title="آخرین ثبت‌ها">
+          {history.length ? <ul className="card divide-y divide-border">{history.map((d) => <li key={d.id} className="flex items-center justify-between gap-3 p-3 text-sm"><div><strong>{d.medications?.name ?? "دارو"}</strong><span className="mr-2 text-muted">{faDate(d.scheduled_for)} · {faTime(d.scheduled_for)}</span></div><span className={`rounded-md px-2 py-1 text-xs ${STATUS[d.status].cls}`}>{STATUS[d.status].label}</span></li>)}</ul> : <Empty>در دو هفتهٔ اخیر سابقه‌ای ثبت نشده است.</Empty>}
         </Section>
         <p className="pb-4 text-center text-xs text-muted">
           RCA Agent جایگزین پزشک یا داروساز نیست. تغییر دوز فقط با نظر پزشک.

@@ -1,11 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useId, useState } from "react";
 import AppShell from "@/components/AppShell";
-import { CheckIcon, ClockIcon, MailIcon, PlusIcon, RepeatIcon, SparkIcon, TrashIcon } from "@/components/Icons";
+import { CheckIcon, ClockIcon, EditIcon, MailIcon, PlusIcon, RepeatIcon, SearchIcon, SparkIcon, TrashIcon } from "@/components/Icons";
 import { Empty, ErrorNote } from "@/components/ui";
 import { addItem, completeItem } from "@/lib/data";
-import { faWhen, fromLocalInput, toFa } from "@/lib/format";
+import { faDate, faWhen, fromLocalInput, toFa, toLocalInput } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
 import { KIND_LABELS, PRIORITY_LABELS, type Item, type ItemKind } from "@/lib/types";
 
@@ -29,6 +30,9 @@ export default function TasksPage() {
   const [items, setItems] = useState<Item[] | null>(null);
   const [filter, setFilter] = useState<ItemKind | "all">("all");
   const [showDone, setShowDone] = useState(false);
+  const [search, setSearch] = useState("");
+  const [day, setDay] = useState("");
+  const [editing, setEditing] = useState<Item | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -67,14 +71,35 @@ export default function TasksPage() {
     }
   }
 
-  const visible = (items ?? []).filter((i) => filter === "all" || i.kind === filter);
+  async function defer(item: Item) {
+    const base = item.due_at ? new Date(item.due_at) : new Date();
+    base.setDate(base.getDate() + 1);
+    const { error } = await supabase.from("items").update({ due_at: base.toISOString(), notified_at: null }).eq("id", item.id);
+    if (error) setError(error.message);
+    else load();
+  }
+
+  const visible = (items ?? []).filter((i) =>
+    (filter === "all" || i.kind === filter) &&
+    (!search.trim() || i.content.toLocaleLowerCase("fa").includes(search.trim().toLocaleLowerCase("fa"))) &&
+    (!day || (i.due_at && toLocalInput(i.due_at).slice(0, 10) === day)));
   const now = new Date().toISOString();
+  const week = Array.from({ length: 7 }, (_, n) => { const date = new Date(); date.setDate(date.getDate() + n); return { key: toLocalInput(date.toISOString()).slice(0, 10), label: n === 0 ? "امروز" : faDate(date, { weekday: "short", month: undefined, day: "numeric" }) }; });
 
   return (
     <AppShell title="کارها و یادآوری‌ها" subtitle={items ? `${toFa(visible.length)} مورد` : undefined}>
       <div className="space-y-6">
         {error && <ErrorNote>{error}</ErrorNote>}
-        <NewItemForm onAdded={load} />
+        <NewItemForm key={editing?.id ?? "new"} initial={editing} onAdded={() => { setEditing(null); load(); }} onCancel={() => setEditing(null)} />
+
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+          <label className="relative block"><SearchIcon width={17} height={17} className="absolute right-3 top-3.5 text-muted" /><span className="sr-only">جست‌وجوی کارها</span><input className="field pr-10" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="جست‌وجو در کارها و یادداشت‌ها" /></label>
+          <input type="date" className="field sm:w-44" aria-label="فیلتر تاریخ" value={day} onChange={(e) => setDay(e.target.value)} />
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1" aria-label="نمای هفت روز آینده">
+          <button type="button" aria-pressed={!day} onClick={() => setDay("")} className={`min-h-11 shrink-0 rounded-lg border px-4 text-sm ${!day ? "border-accent bg-accent-soft text-accent" : "border-border bg-surface"}`}>همهٔ روزها</button>
+          {week.map((d) => <button key={d.key} type="button" aria-pressed={day === d.key} onClick={() => setDay(day === d.key ? "" : d.key)} className={`min-h-11 shrink-0 rounded-lg border px-4 text-sm ${day === d.key ? "border-accent bg-accent-soft text-accent" : "border-border bg-surface"}`}>{d.label}</button>)}
+        </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div role="tablist" className="flex gap-1 rounded-xl bg-surface-2 p-1">
@@ -101,15 +126,15 @@ export default function TasksPage() {
         {items === null ? (
           <div className="card h-48 animate-pulse" />
         ) : visible.length === 0 ? (
-          <Empty>{showDone ? "هنوز چیزی انجام نشده." : "چیزی اینجا نیست. از بالا اضافه کن."}</Empty>
+          <Empty>{search || day ? "موردی با این جست‌وجو یا تاریخ پیدا نشد. فیلترها را تغییر بده." : showDone ? "هنوز چیزی انجام نشده." : "چیزی اینجا نیست. از بالا اضافه کن."}</Empty>
         ) : (
           <ul className="space-y-2">
             {visible.map((item) => (
-              <li key={item.id} className="card animate-rise flex items-start gap-3 p-3.5">
+              <li key={item.id} className="card animate-rise flex flex-wrap items-start gap-3 p-3.5 sm:flex-nowrap">
                 <button
                   onClick={() => toggle(item)}
                   aria-label={item.done ? `برگردون: ${item.content}` : `انجام شد: ${item.content}`}
-                  className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-lg border-2 transition ${
+                  className={`mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg border-2 transition ${
                     item.done
                       ? "border-success bg-success text-white"
                       : "border-border text-transparent hover:border-accent hover:text-accent"
@@ -143,9 +168,7 @@ export default function TasksPage() {
                       </span>
                     )}
                     {item.source === "email" && (
-                      <span className="flex items-center gap-1 rounded-md bg-surface-2 px-2 py-0.5 text-muted">
-                        <MailIcon width={12} height={12} /> از ایمیل
-                      </span>
+                      <Link href={`/inbox/?ref=${encodeURIComponent(item.source_ref ?? "")}`} className="flex items-center gap-1 rounded-md bg-surface-2 px-2 py-0.5 text-accent hover:underline"><MailIcon width={12} height={12} /> ایمیل مرتبط</Link>
                     )}
                     {item.source === "agent" && (
                       <span className="flex items-center gap-1 rounded-md bg-surface-2 px-2 py-0.5 text-muted">
@@ -154,10 +177,12 @@ export default function TasksPage() {
                     )}
                   </div>
                 </div>
+                {!item.done && <button onClick={() => defer(item)} className="btn btn-ghost shrink-0 px-3 text-xs" aria-label={`تعویق یک‌روزه: ${item.content}`}>فردا</button>}
+                <button onClick={() => { setEditing(item); window.scrollTo({ top: 0, behavior: "smooth" }); }} aria-label={`ویرایش: ${item.content}`} className="grid size-10 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-accent-soft hover:text-accent"><EditIcon width={17} height={17} /></button>
                 <button
                   onClick={() => remove(item)}
                   aria-label={`حذف: ${item.content}`}
-                  className="rounded-lg p-1.5 text-muted transition hover:bg-danger-bg hover:text-danger"
+                  className="grid size-10 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-danger-bg hover:text-danger"
                 >
                   <TrashIcon width={16} height={16} />
                 </button>
@@ -170,13 +195,13 @@ export default function TasksPage() {
   );
 }
 
-function NewItemForm({ onAdded }: { onAdded: () => void }) {
+function NewItemForm({ onAdded, onCancel, initial }: { onAdded: () => void; onCancel: () => void; initial: Item | null }) {
   const ids = { content: useId(), kind: useId(), due: useId(), prio: useId(), rec: useId() };
-  const [content, setContent] = useState("");
-  const [kind, setKind] = useState<ItemKind>("task");
-  const [due, setDue] = useState("");
-  const [priority, setPriority] = useState(1);
-  const [recurrence, setRecurrence] = useState("");
+  const [content, setContent] = useState(initial?.content ?? "");
+  const [kind, setKind] = useState<ItemKind>(initial?.kind ?? "task");
+  const [due, setDue] = useState(toLocalInput(initial?.due_at ?? null));
+  const [priority, setPriority] = useState(initial?.priority ?? 1);
+  const [recurrence, setRecurrence] = useState(initial?.recurrence ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -186,14 +211,21 @@ function NewItemForm({ onAdded }: { onAdded: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      const { data } = await createClient().auth.getUser();
-      await addItem(data.user!.id, {
+      const fields = {
         content: content.trim(),
         kind,
         due_at: fromLocalInput(due),
         priority,
         recurrence: (recurrence || null) as Item["recurrence"],
-      });
+      };
+      if (initial) {
+        const { error } = await createClient().from("items").update(fields).eq("id", initial.id);
+        if (error) throw error;
+      } else {
+        const { data } = await createClient().auth.getUser();
+        if (!data.user) throw new Error("وارد حساب نشده‌اید.");
+        await addItem(data.user.id, fields);
+      }
       setContent("");
       setDue("");
       setRecurrence("");
@@ -208,6 +240,7 @@ function NewItemForm({ onAdded }: { onAdded: () => void }) {
 
   return (
     <form onSubmit={submit} className="card space-y-3 p-4">
+      {initial && <div className="flex items-center justify-between"><strong className="text-sm">ویرایش مورد</strong><button type="button" className="text-sm text-muted hover:text-accent" onClick={onCancel}>انصراف</button></div>}
       <label htmlFor={ids.content} className="sr-only">متن</label>
       <input
         id={ids.content}
@@ -252,7 +285,7 @@ function NewItemForm({ onAdded }: { onAdded: () => void }) {
         {error ? <span className="text-sm text-danger">{error}</span> : <span />}
         <button type="submit" disabled={busy} className="btn btn-primary">
           <PlusIcon width={16} height={16} />
-          {busy ? "در حال ثبت…" : "اضافه کن"}
+          {busy ? "در حال ذخیره…" : initial ? "ذخیره تغییرات" : "اضافه کن"}
         </button>
       </div>
     </form>
