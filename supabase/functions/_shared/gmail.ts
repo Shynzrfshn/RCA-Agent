@@ -32,6 +32,7 @@ async function tokenRequest(params: Record<string, string>) {
   const { id, secret } = googleCreds();
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
+    signal: AbortSignal.timeout(15000),
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ client_id: id, client_secret: secret, ...params }),
   });
@@ -48,6 +49,7 @@ export const refreshAccess = (refreshToken: string) =>
 
 async function gmail<T>(accessToken: string, path: string): Promise<T> {
   const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/${path}`, {
+    signal: AbortSignal.timeout(15000),
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) throw new Error(`gmail ${path.split("?")[0]}: ${res.status}`);
@@ -57,11 +59,16 @@ async function gmail<T>(accessToken: string, path: string): Promise<T> {
 export const getProfile = (at: string) => gmail<{ emailAddress: string }>(at, "profile");
 
 export async function listMessageIds(at: string, query: string, max = 25): Promise<string[]> {
-  const r = await gmail<{ messages?: { id: string }[] }>(
-    at,
-    `messages?${new URLSearchParams({ q: query, maxResults: String(max) })}`,
-  );
-  return (r.messages ?? []).map((m) => m.id);
+  const ids: string[] = [];
+  let pageToken: string | undefined;
+  do {
+    const params = new URLSearchParams({ q: query, maxResults: String(Math.min(100, max - ids.length)) });
+    if (pageToken) params.set("pageToken", pageToken);
+    const r = await gmail<{ messages?: { id: string }[]; nextPageToken?: string }>(at, `messages?${params}`);
+    ids.push(...(r.messages ?? []).map((m) => m.id));
+    pageToken = r.nextPageToken;
+  } while (pageToken && ids.length < max);
+  return ids;
 }
 
 export type GmailMeta = {
@@ -104,3 +111,4 @@ function decodeEntities(s: string): string {
     .replace(/&gt;/g, ">")
     .replace(/&amp;/g, "&");
 }
+
