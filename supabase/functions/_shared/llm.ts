@@ -22,7 +22,8 @@ function providers(): Provider[] {
 }
 
 export class LlmError extends Error {
-  constructor(public status: number, message: string) { super(message); this.name = "LlmError"; }
+  status: number;
+  constructor(status: number, message: string) { super(message); this.status = status; this.name = "LlmError"; }
 }
 
 export async function chat(opts: { messages: ChatMessage[]; tools?: ToolDef[]; json?: boolean; maxTokens?: number; temperature?: number }): Promise<{ message: Extract<ChatMessage, { role: "assistant" }>; finishReason: string }> {
