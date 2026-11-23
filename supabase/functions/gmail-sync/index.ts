@@ -127,15 +127,16 @@ serve(async (req) => {
         );
         if (t?.action_needed && t.task) {
           const due = t.task_due && !Number.isNaN(Date.parse(t.task_due)) ? t.task_due : null;
-          await admin.from("items").insert({
+          const { error: taskError } = await admin.from("items").upsert({
             user_id: acc.user_id,
             kind: "task",
             content: t.task,
             due_at: due,
             priority: t.category === "urgent" ? 3 : 2,
             source: "email",
-            source_ref: m.id,
-          });
+            source_ref: `${acc.id}:${m.id}`,
+          }, { onConflict: "user_id,source,source_ref", ignoreDuplicates: true });
+          if (taskError) throw taskError;
         }
         if (t?.category === "urgent") urgent++;
       }
@@ -165,3 +166,4 @@ serve(async (req) => {
   }
   return json({ synced: report });
 });
+
