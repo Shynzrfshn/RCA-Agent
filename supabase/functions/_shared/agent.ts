@@ -102,8 +102,8 @@ export async function runAgent(opts: {
         await opts.admin.from("agent_actions").insert({
           user_id: opts.userId,
           tool: call.function.name,
-          input,
-          result: out as object,
+          input: { redacted: true },
+          result: { ok: true },
         });
         content = JSON.stringify(out);
       } catch (err) {
@@ -193,3 +193,4 @@ ${JSON.stringify(data)}
 
 export const generateBriefing = (db: SupabaseClient, userId: string) =>
   generateReview(db, userId, "morning");
+
