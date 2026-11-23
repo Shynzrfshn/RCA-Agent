@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { toFa } from "@/lib/format";
 
 export function ProgressRing({
@@ -14,7 +14,6 @@ export function ProgressRing({
   size?: number;
   label?: string;
 }) {
-  const gid = `ring${useId().replace(/:/g, "")}`;
   const stroke = 9;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
@@ -27,7 +26,7 @@ export function ProgressRing({
           cx={size / 2}
           cy={size / 2}
           r={r}
-          stroke={`url(#${gid})`}
+          stroke="var(--accent)"
           strokeWidth={stroke}
           fill="none"
           strokeLinecap="round"
@@ -35,12 +34,6 @@ export function ProgressRing({
           strokeDashoffset={c * (1 - pct)}
           style={{ transition: "stroke-dashoffset .6s ease" }}
         />
-        <defs>
-          <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="var(--accent)" />
-            <stop offset="1" stopColor="var(--accent-2)" />
-          </linearGradient>
-        </defs>
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-lg font-bold">
@@ -72,7 +65,7 @@ export function StatCard({
     danger: "bg-danger-bg text-danger",
   };
   return (
-    <div className="card animate-rise flex flex-col gap-3 p-4">
+    <div className="card animate-rise flex flex-col gap-3 border-t-2 border-t-accent p-4 sm:p-5">
       <div className="flex items-center justify-between">
         <span className="text-sm text-muted">{label}</span>
         {icon && <span className={`rounded-lg p-1.5 ${tones[tone]}`}>{icon}</span>}
@@ -111,7 +104,7 @@ export function Section({
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-muted">{title}</h2>
+        <h2 className="text-base font-bold">{title}</h2>
         {action}
       </div>
       {children}

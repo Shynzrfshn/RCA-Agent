@@ -25,19 +25,24 @@ export default function InboxPage() {
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [showLow, setShowLow] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [taskDone, setTaskDone] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [acc, em] = await Promise.all([
       supabase.from("email_accounts").select("id, email, last_synced_at, last_error"),
       supabase
         .from("emails")
-        .select("id, from_addr, subject, snippet, summary, category, action_needed, is_read, received_at")
+        .select("id, account_id, provider_id, from_addr, subject, snippet, summary, category, action_needed, is_read, received_at")
         .order("received_at", { ascending: false })
         .limit(150),
     ]);
     if (acc.error) setError(acc.error.message);
     setAccounts((acc.data as EmailAccount[]) ?? []);
     setEmails((em.data as Email[]) ?? []);
+    const ref = new URLSearchParams(window.location.search).get("ref");
+    const target = (em.data as Email[] | null)?.find((e) => `${e.account_id}:${e.provider_id}` === ref);
+    if (target) setExpanded(target.id);
   }, [supabase]);
 
   useEffect(() => {
@@ -60,7 +65,19 @@ export default function InboxPage() {
 
   async function markRead(e: Email) {
     setEmails((prev) => prev.map((x) => (x.id === e.id ? { ...x, is_read: true } : x)));
-    await supabase.from("emails").update({ is_read: true }).eq("id", e.id);
+    setExpanded((prev) => prev === e.id ? null : e.id);
+    const { error } = await supabase.from("emails").update({ is_read: true }).eq("id", e.id);
+    if (error) setError(error.message);
+  }
+
+  async function makeTask(e: Email) {
+    setError(null);
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) return setError("برای ساخت کار باید وارد حساب شوید.");
+    const source_ref = `${e.account_id}:${e.provider_id}`;
+    const { error } = await supabase.from("items").upsert({ user_id: data.user.id, kind: "task", content: e.subject || e.summary || "پیگیری ایمیل", source: "email", source_ref, priority: e.category === "urgent" ? 3 : 2 }, { onConflict: "user_id,source,source_ref", ignoreDuplicates: true });
+    if (error) setError(error.message);
+    else setTaskDone(e.id);
   }
 
   const counts = Object.fromEntries(
@@ -128,10 +145,11 @@ export default function InboxPage() {
                   <Section key={c.key} title={`${c.label} (${toFa(list.length)})`}>
                     <ul className="card divide-y divide-border overflow-hidden">
                       {list.map((e) => (
-                        <li key={e.id}>
+                        <li key={e.id} id={`email-${e.id}`} className={expanded === e.id ? "bg-accent-soft/40" : ""}>
                           <button
                             onClick={() => markRead(e)}
-                            className={`block w-full p-3.5 text-right transition hover:bg-surface-2 ${e.is_read ? "opacity-60" : ""}`}
+                            aria-expanded={expanded === e.id}
+                            className={`block w-full p-3.5 text-right transition hover:bg-surface-2 ${e.is_read ? "opacity-80" : ""}`}
                           >
                             <div className="flex items-center gap-2">
                               {!e.is_read && <span className="size-2 shrink-0 rounded-full bg-accent" aria-label="خوانده نشده" />}
@@ -148,6 +166,10 @@ export default function InboxPage() {
                             </div>
                             <p className="mt-1.5 text-sm leading-6">{e.summary ?? e.snippet}</p>
                           </button>
+                          {expanded === e.id && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-surface-2 px-4 py-3 text-sm">
+                            <span className="max-w-xl leading-6 text-muted">{e.action_needed ? "این پیام نیازمند پیگیری تشخیص داده شده است. پیش از ساخت کار، موضوع و خلاصه را بررسی کن." : "در صورت نیاز می‌توانی پیگیری این پیام را به کارها اضافه کنی."}</span>
+                            <button type="button" onClick={() => makeTask(e)} className="btn btn-ghost text-xs">{taskDone === e.id ? "در کارها ثبت شد" : "ساخت کار از ایمیل"}</button>
+                          </div>}
                         </li>
                       ))}
                     </ul>

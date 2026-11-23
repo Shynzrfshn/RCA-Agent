@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f6f6fb;
+  --background: #f3f5f2;
   --surface: #ffffff;
-  --surface-2: #f0f0f7;
-  --foreground: #16151f;
-  --muted: #6b6a7b;
-  --border: #e4e3ee;
-  --accent: #5b4cf0;
-  --accent-2: #a855f7;
-  --accent-soft: #ecebfe;
+  --surface-2: #e9eeeb;
+  --foreground: #16272b;
+  --muted: #607275;
+  --border: #dce5e1;
+  --accent: #087c71;
+  --accent-2: #103e45;
+  --accent-soft: #e4f3ee;
   --accent-foreground: #ffffff;
   --success: #0f9d6b;
   --success-soft: #e3f7ef;
@@ -17,50 +17,50 @@
   --warning-soft: #fdf3dc;
   --danger: #d03535;
   --danger-bg: #fdecec;
-  --ring: #5b4cf0;
-  --shadow: 0 1px 2px rgb(22 21 31 / 0.04), 0 8px 24px -12px rgb(22 21 31 / 0.12);
+  --ring: #087c71;
+  --shadow: 0 14px 38px -31px rgb(14 48 46 / 0.24);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --background: #0b0b12;
-    --surface: #15141f;
-    --surface-2: #1d1c2a;
-    --foreground: #f1f0f8;
-    --muted: #9b99ad;
-    --border: #2a2939;
-    --accent: #8b7dff;
-    --accent-2: #c084fc;
-    --accent-soft: #24213f;
-    --accent-foreground: #0b0b12;
+    --background: #0d171b;
+    --surface: #152126;
+    --surface-2: #203238;
+    --foreground: #edf5f1;
+    --muted: #a1b8b3;
+    --border: #2e4648;
+    --accent: #77dfc2;
+    --accent-2: #a5e9d4;
+    --accent-soft: #20413e;
+    --accent-foreground: #102421;
     --success: #34d399;
     --success-soft: #0f2a21;
     --warning: #fbbf24;
     --warning-soft: #2b2310;
     --danger: #f87171;
     --danger-bg: #2c1416;
-    --ring: #8b7dff;
+    --ring: #77dfc2;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -12px rgb(0 0 0 / 0.6);
   }
 }
 :root[data-theme="dark"] {
-  --background: #0b0b12;
-  --surface: #15141f;
-  --surface-2: #1d1c2a;
-  --foreground: #f1f0f8;
-  --muted: #9b99ad;
-  --border: #2a2939;
-  --accent: #8b7dff;
-  --accent-2: #c084fc;
-  --accent-soft: #24213f;
-  --accent-foreground: #0b0b12;
+  --background: #0d171b;
+  --surface: #152126;
+  --surface-2: #203238;
+  --foreground: #edf5f1;
+  --muted: #a1b8b3;
+  --border: #2e4648;
+  --accent: #77dfc2;
+  --accent-2: #a5e9d4;
+  --accent-soft: #20413e;
+  --accent-foreground: #102421;
   --success: #34d399;
   --success-soft: #0f2a21;
   --warning: #fbbf24;
   --warning-soft: #2b2310;
   --danger: #f87171;
   --danger-bg: #2c1416;
-  --ring: #8b7dff;
+  --ring: #77dfc2;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -12px rgb(0 0 0 / 0.6);
 }
 
@@ -102,6 +102,12 @@ body {
   font-family: var(--font-sans);
   font-feature-settings: "ss01";
 }
+.app-frame { background: radial-gradient(circle at 75% -20%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 44%), var(--background); }
+.app-sidebar { background: var(--surface); }
+.nav-link.is-active { box-shadow: inset -3px 0 var(--accent); }
+.mobile-nav { box-shadow: 0 -12px 40px -28px rgb(0 0 0 / .25); }
+.landing { background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 5%, var(--background)), var(--background) 48%); }
+.hero-preview { background: color-mix(in srgb, var(--surface) 88%, var(--accent-soft)); box-shadow: 24px 24px 0 -9px color-mix(in srgb, var(--accent) 9%, transparent); }
 
 * {
   border-color: var(--border);
@@ -115,12 +121,13 @@ body {
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 1.25rem;
+  border-radius: 0.9rem;
   box-shadow: var(--shadow);
 }
+.card :is(button, a):focus-visible { outline-offset: 3px; }
 
 .gradient-accent {
-  background-image: linear-gradient(135deg, var(--accent), var(--accent-2));
+  background: var(--accent);
 }
 
 .text-gradient {
@@ -132,7 +139,7 @@ body {
 
 .field {
   width: 100%;
-  border-radius: 0.75rem;
+  border-radius: 0.55rem;
   border: 1px solid var(--border);
   background: var(--background);
   padding: 0.625rem 0.875rem;
@@ -147,8 +154,9 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  border-radius: 0.75rem;
-  padding: 0.55rem 1rem;
+  border-radius: 0.55rem;
+  min-height: 2.75rem;
+  padding: 0.6rem 1rem;
   font-weight: 600;
   font-size: 0.875rem;
   transition: transform 0.15s, opacity 0.15s, background 0.15s;
@@ -160,9 +168,10 @@ body {
   opacity: 0.5;
 }
 .btn-primary {
-  color: #fff;
-  background-image: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: var(--accent-foreground);
+  background: var(--accent);
 }
+.btn-primary:hover { background: var(--accent-2); color: #fff; }
 .btn-ghost {
   background: var(--surface-2);
   color: var(--foreground);
@@ -170,6 +179,7 @@ body {
 .btn-ghost:hover {
   background: var(--accent-soft);
 }
+button:disabled { cursor: not-allowed; }
 
 @keyframes rise {
   from {

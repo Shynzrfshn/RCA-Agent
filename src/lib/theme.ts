@@ -2,7 +2,7 @@ export type ThemeMode = "system" | "light" | "dark";
 export type Accent = "violet" | "blue" | "green" | "rose" | "amber";
 
 export const ACCENTS: { value: Accent; label: string; swatch: string }[] = [
-  { value: "violet", label: "بنفش", swatch: "linear-gradient(135deg,#5b4cf0,#a855f7)" },
+  { value: "violet", label: "یشمی", swatch: "#087c71" },
   { value: "blue", label: "آبی", swatch: "linear-gradient(135deg,#2563eb,#06b6d4)" },
   { value: "green", label: "سبز", swatch: "linear-gradient(135deg,#059669,#84cc16)" },
   { value: "rose", label: "سرخ", swatch: "linear-gradient(135deg,#e11d48,#f97316)" },

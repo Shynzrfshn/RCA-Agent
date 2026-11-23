@@ -12,9 +12,9 @@ type Kind = "morning" | "evening" | "weekly";
 type Review = { day: string; kind: Kind; content: string; created_at: string };
 
 const TABS: { kind: Kind; label: string; empty: string }[] = [
-  { kind: "morning", label: "☀️ صبح", empty: "هر صبح ایجنت یه خلاصه از کارها، داروها و ایمیل‌های مهمت می‌نویسه." },
-  { kind: "evening", label: "🌙 شب", empty: "هر شب ایجنت روزت رو مرور می‌کنه و برنامه‌ی فردا رو پیشنهاد می‌ده." },
-  { kind: "weekly", label: "📊 هفته", empty: "آخر هر هفته یه مرور با آمار، نقاط قوت و اولویت‌های هفته‌ی بعد." },
+  { kind: "morning", label: "صبح", empty: "خلاصهٔ صبح از کارها، داروها و ایمیل‌های مهم." },
+  { kind: "evening", label: "شب", empty: "مرور روز و پیشنهاد برنامهٔ فردا." },
+  { kind: "weekly", label: "هفته", empty: "مرور هفتگی و اولویت‌های هفتهٔ بعد." },
 ];
 
 /** Morning briefing / evening review / weekly review, with manual refresh. */
@@ -58,7 +58,6 @@ export function ReviewsCard() {
 
   return (
     <div className="card relative overflow-hidden p-5">
-      <div className="gradient-accent pointer-events-none absolute -top-16 -left-16 size-40 rounded-full opacity-20 blur-2xl" />
       <div className="relative mb-4 flex items-center justify-between gap-2">
         <div role="tablist" aria-label="نوع مرور" className="flex gap-1 rounded-xl bg-surface-2 p-1">
           {TABS.map((t) => (

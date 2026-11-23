@@ -1,38 +1,40 @@
 import Link from "next/link";
-import { BellIcon, ChatIcon, LogoMark, MailIcon, PillIcon } from "@/components/Icons";
+import { ArrowIcon, BellIcon, ChatIcon, LogoMark, MailIcon, PillIcon } from "@/components/Icons";
 
 const FEATURES = [
-  { Icon: PillIcon, title: "یادآور دارو", text: "اعلان سر ساعت با دکمه‌ی «خوردم»، هشدار تموم شدن دارو و آمار مصرف." },
-  { Icon: MailIcon, title: "ایمیل هوشمند", text: "خلاصه، دسته‌بندی فوری/مهم و استخراج کارها از ایمیل‌ها." },
-  { Icon: BellIcon, title: "یادآوری و کارها", text: "به زبان خودت بگو؛ تاریخ، تکرار و اولویت رو خودش می‌فهمه." },
-  { Icon: ChatIcon, title: "ایجنت گفتگو", text: "ازش بپرس امروز چی داری، یا بگو برنامه‌ی فردات رو بچینه." },
+  { Icon: BellIcon, title: "برنامه و یادآوری", text: "کارها، زمان‌ها و اولویت‌ها را در یک فضای روشن ببین." },
+  { Icon: PillIcon, title: "پیگیری دارو", text: "دوزهای امروز و روند مصرف را با جزئیات ثبت کن." },
+  { Icon: MailIcon, title: "ایمیل‌های مهم", text: "از میان پیام‌ها، موارد نیازمند توجه را جدا کن." },
+  { Icon: ChatIcon, title: "ایجنت شخصی", text: "دربارهٔ روزت بپرس و کارها را به زبان طبیعی پیش ببر." },
 ];
 
 export default function Home() {
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-6 py-16 text-center">
-      <div className="gradient-accent pointer-events-none absolute -top-40 left-1/2 size-[36rem] -translate-x-1/2 rounded-full opacity-20 blur-3xl" />
-      <LogoMark width={64} height={64} className="animate-rise relative" />
-      <h1 className="animate-rise relative mt-6 text-4xl font-bold tracking-tight sm:text-6xl">
-        دستیار شخصی <span className="text-gradient">هوشمند</span> تو
-      </h1>
-      <p className="animate-rise relative mt-5 max-w-xl text-base leading-8 text-muted sm:text-lg">
-        RCA Agent ایمیل‌هات رو می‌خونه، داروهات رو یادت میندازه، کارهات رو مرتب می‌کنه و هر صبح یه خلاصه‌ی
-        کوتاه از روزت بهت می‌ده.
-      </p>
-      <Link href="/login/" className="btn btn-primary animate-rise relative mt-8 px-8 py-3 text-base">
-        شروع کن
-      </Link>
-      <div className="relative mt-16 grid w-full max-w-4xl gap-3 text-right sm:grid-cols-2 lg:grid-cols-4">
-        {FEATURES.map(({ Icon, title, text }) => (
-          <div key={title} className="card animate-rise p-5">
-            <span className="mb-3 grid size-10 place-items-center rounded-xl bg-accent-soft text-accent">
-              <Icon />
-            </span>
-            <h2 className="font-semibold">{title}</h2>
-            <p className="mt-1 text-sm leading-6 text-muted">{text}</p>
+    <main className="landing min-h-screen px-5 py-6 sm:px-8">
+      <div className="mx-auto max-w-6xl">
+        <header className="flex items-center justify-between border-b border-border pb-5">
+          <div className="flex items-center gap-3"><LogoMark width={38} height={38} /><span className="text-lg font-bold tracking-tight">RCA<span className="font-normal">/Agent</span></span></div>
+          <Link href="/login/" className="btn btn-ghost">ورود به فضای شخصی <ArrowIcon width={16} height={16} /></Link>
+        </header>
+        <div className="grid min-h-[33rem] items-center gap-12 py-14 lg:grid-cols-[1.1fr_.9fr]">
+          <div>
+            <div className="mb-7 inline-flex items-center gap-2 border-b border-accent pb-2 text-xs font-bold tracking-[.14em] text-accent">فضای شخصی برای روزهای پیچیده</div>
+            <h1 className="max-w-3xl text-5xl font-bold leading-[1.35] tracking-tight sm:text-7xl">وضوح بیشتر<br /><span className="text-accent">در هر روز.</span></h1>
+            <p className="mt-7 max-w-xl text-base leading-9 text-muted sm:text-lg">کارها، داروها، ایمیل‌های مهم و گفتگو با ایجنت در یک فضای آرام و منظم. تصمیم با توست؛ RCA اطلاعات را کنار هم می‌گذارد.</p>
+            <div className="mt-9 flex flex-wrap items-center gap-4"><Link href="/login/" className="btn btn-primary px-7">شروع کار <ArrowIcon width={18} height={18} /></Link><span className="text-xs text-muted">بدون پرداخت برای قابلیت‌های پایه</span></div>
           </div>
-        ))}
+          <div className="hero-preview card relative overflow-hidden p-5 sm:p-7" aria-label="پیش‌نمایش فضای کاری">
+            <div className="mb-8 flex items-center justify-between border-b border-border pb-5"><span className="text-xs font-bold tracking-widest text-muted" dir="ltr">YOUR DAY / RCA</span><span className="rounded-full bg-success-soft px-3 py-1 text-xs text-success">آماده برای امروز</span></div>
+            <div className="mb-6 text-2xl font-bold">یک نگاه، همهٔ اولویت‌ها</div>
+            <div className="space-y-3">
+              {[{ n: "01", title: "کارهای امروز", detail: "قدم بعدی روشن است", Icon: BellIcon }, { n: "02", title: "دوزهای دارو", detail: "زمان‌بندی و سابقهٔ مصرف", Icon: PillIcon }, { n: "03", title: "ایمیل‌های نیازمند توجه", detail: "خلاصه و اقدام پیشنهادی", Icon: MailIcon }].map(({ n, title, detail, Icon }) => <div key={n} className="flex items-center gap-4 rounded-lg border border-border bg-surface p-4"><span className="text-xs tabular-nums text-accent" dir="ltr">{n}</span><span className="grid size-10 place-items-center rounded-md bg-accent-soft text-accent"><Icon width={19} height={19} /></span><div><div className="text-sm font-semibold">{title}</div><div className="mt-1 text-xs text-muted">{detail}</div></div></div>)}
+            </div>
+            <div className="mt-8 border-t border-border pt-5 text-xs leading-6 text-muted">یک ابزار شخصی با کنترل روشن روی داده‌ها و سرویس‌های هوش مصنوعی.</div>
+          </div>
+        </div>
+        <section className="grid gap-3 border-t border-border py-8 sm:grid-cols-2 lg:grid-cols-4" aria-label="قابلیت‌ها">
+          {FEATURES.map(({ Icon, title, text }, i) => <div key={title} className="p-4"><div className="mb-5 flex items-center justify-between"><Icon width={23} height={23} className="text-accent" /><span className="text-xs text-muted" dir="ltr">0{i + 1}</span></div><h2 className="font-bold">{title}</h2><p className="mt-2 text-sm leading-7 text-muted">{text}</p></div>)}
+        </section>
       </div>
     </main>
   );

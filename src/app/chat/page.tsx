@@ -16,6 +16,8 @@ const SUGGESTIONS = [
   "پایبندی دارویی‌ام این دو هفته چطور بوده؟",
   "برای فردا یه برنامه‌ی روزانه بچین",
 ];
+const TOOL_LABELS: Record<string, string> = { create_item: "ثبت کار", update_item: "ویرایش کار", complete_item: "تکمیل کار", add_medication: "ثبت دارو", search_emails: "جست‌وجوی ایمیل", get_overview: "بررسی برنامه", remember: "ثبت در حافظه" };
+type Attempt = { msg: string; photo: string | null; requestId: string };
 
 export default function ChatPage() {
   const supabase = createClient();
@@ -25,6 +27,8 @@ export default function ChatPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [image, setImage] = useState<string | null>(null);
+  const [lastAttempt, setLastAttempt] = useState<Attempt | null>(null);
+  const [actionLog, setActionLog] = useState<{ tool: string; ok: boolean }[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -40,27 +44,29 @@ export default function ChatPage() {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, busy]);
 
-  async function send(content: string) {
-    const msg = content.trim();
-    const photo = image;
+  async function send(content: string, retry?: Attempt) {
+    const msg = retry?.msg ?? content.trim();
+    const photo = retry?.photo ?? image;
     if ((!msg && !photo) || busy) return;
+    const requestId = retry?.requestId ?? crypto.randomUUID();
     setText("");
     setImage(null);
     setError(null);
+    setActionLog([]);
     setBusy(true);
     const now = new Date().toISOString();
-    setMessages((m) => [
-      ...m,
-      { id: `local-${now}`, role: "user", content: photo ? `📷 ${msg || "عکس"}` : msg, created_at: now },
-    ]);
+    if (!retry) setMessages((m) => [ ...m, { id: `local-${now}`, role: "user", content: photo ? `[تصویر] ${msg}`.trim() : msg, created_at: now } ]);
     try {
-      const res = await askAgent(msg, photo ?? undefined);
+      const res = await askAgent(msg, photo ?? undefined, requestId);
+      setActionLog(res.actions);
+      setLastAttempt(null);
       setMessages((m) => [
         ...m,
         { id: `reply-${Date.now()}`, role: "assistant", content: res.reply, created_at: new Date().toISOString() },
       ]);
     } catch (e) {
       setError((e as Error).message);
+      setLastAttempt({ msg, photo, requestId });
     } finally {
       setBusy(false);
     }
@@ -125,7 +131,8 @@ export default function ChatPage() {
               </div>
             </div>
           )}
-          {error && <ErrorNote>{error}</ErrorNote>}
+          {actionLog.length > 0 && <div className="card mr-auto max-w-lg p-4 text-sm" role="status"><div className="mb-2 font-semibold">اقدام‌های این پاسخ</div><ul className="space-y-1.5">{actionLog.map((a, i) => <li key={`${a.tool}-${i}`} className="flex items-center justify-between gap-4"><span>{TOOL_LABELS[a.tool] ?? a.tool.replaceAll("_", " ")}</span><span className={a.ok ? "text-success" : "text-danger"}>{a.ok ? "انجام شد" : "ناموفق"}</span></li>)}</ul></div>}
+          {error && <div><ErrorNote>{error}</ErrorNote>{lastAttempt && <button type="button" className="btn btn-ghost mt-2" onClick={() => send(lastAttempt.msg, lastAttempt)}>تلاش دوباره</button>}</div>}
           <div ref={endRef} />
         </div>
 

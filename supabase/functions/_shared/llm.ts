@@ -9,16 +9,21 @@ export type ToolDef = { name: string; description: string; input_schema: Record<
 type Provider = { name: string; url: string; key: string; model: string; tools: boolean; vision: boolean; json: boolean };
 const cooldown = new Map<string, number>();
 const env = (name: string) => Deno.env.get(name)?.trim() || "";
+// Strict mode is the default. Other providers have free tiers but may bill if
+// their account is upgraded; they require an explicit owner opt-in.
+const strictFree = () => env("LLM_FREE_ONLY") !== "false";
+const freeRouterModel = (name: string) => name === "openrouter/free" || name.endsWith(":free");
 
 function providers(): Provider[] {
+  const routerModel = env("LLM_MODEL");
   const all: Provider[] = [
-    { name: "openrouter", url: env("LLM_BASE_URL") || "https://openrouter.ai/api/v1", key: env("LLM_API_KEY"), model: env("LLM_MODEL") || "nvidia/nemotron-3.5-super-vl:free", tools: true, vision: true, json: true },
+    { name: "openrouter", url: strictFree() ? "https://openrouter.ai/api/v1" : env("LLM_BASE_URL") || "https://openrouter.ai/api/v1", key: env("LLM_API_KEY"), model: strictFree() && routerModel && !freeRouterModel(routerModel) ? "nvidia/nemotron-3.5-super-vl:free" : routerModel || "nvidia/nemotron-3.5-super-vl:free", tools: true, vision: true, json: true },
     { name: "gemini", url: "https://generativelanguage.googleapis.com/v1beta/openai", key: env("GEMINI_API_KEY"), model: env("GEMINI_MODEL") || "gemini-2.5-flash-lite", tools: true, vision: true, json: true },
     { name: "groq", url: "https://api.groq.com/openai/v1", key: env("GROQ_API_KEY"), model: env("GROQ_MODEL") || "openai/gpt-oss-20b", tools: true, vision: false, json: true },
     { name: "cloudflare", url: `https://api.cloudflare.com/client/v4/accounts/${env("CLOUDFLARE_ACCOUNT_ID")}/ai/v1`, key: env("CLOUDFLARE_API_KEY"), model: env("CLOUDFLARE_MODEL") || "@cf/meta/llama-3.1-8b-instruct", tools: false, vision: false, json: false },
   ];
   const order = (env("LLM_PROVIDER_ORDER") || "openrouter,gemini,groq,cloudflare").split(",").map((s) => s.trim());
-  return order.flatMap((name) => all.filter((p) => p.name === name && p.key && (name !== "cloudflare" || env("CLOUDFLARE_ACCOUNT_ID"))));
+  return order.flatMap((name) => all.filter((p) => p.name === name && p.key && (!strictFree() || name === "openrouter") && (name !== "cloudflare" || env("CLOUDFLARE_ACCOUNT_ID"))));
 }
 
 export class LlmError extends Error {
@@ -35,7 +40,7 @@ export async function chat(opts: { messages: ChatMessage[]; tools?: ToolDef[]; j
     if ((cooldown.get(p.name) || 0) > Date.now()) continue;
     const body: Record<string, unknown> = { model: p.model, messages: opts.messages, max_tokens: opts.maxTokens ?? 4000, temperature: opts.temperature ?? 0.3 };
     if (p.name === "openrouter") {
-      const fallbacks = (env("LLM_FALLBACK_MODELS") || "google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free").split(",").map((s) => s.trim()).filter((s) => s && s !== p.model);
+      const fallbacks = (env("LLM_FALLBACK_MODELS") || "google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free").split(",").map((s) => s.trim()).filter((s) => s && s !== p.model && (!strictFree() || freeRouterModel(s)));
       if (fallbacks.length) body.models = [p.model, ...fallbacks];
     }
     if (opts.tools?.length) {
@@ -78,4 +83,3 @@ export function parseJson<T>(text: string | null): T | null {
   try { return JSON.parse(text.replace(/^\s*```(?:json)?/i, "").replace(/```\s*$/, "").trim()) as T; }
   catch { return null; }
 }
-

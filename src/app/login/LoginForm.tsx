@@ -3,6 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { useId, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { LogoMark } from "@/components/Icons";
 
 export default function LoginForm() {
   const searchParams = useSearchParams();
@@ -33,10 +34,11 @@ export default function LoginForm() {
   }
 
   return (
-    <div className="w-full max-w-sm space-y-6 rounded-2xl border border-border bg-surface p-8 shadow-sm">
-      <div className="space-y-1 text-center">
-        <h1 className="text-xl font-bold">ورود به RCA Agent</h1>
-        <p className="text-sm text-muted">با ایمیلت، بدون پسورد</p>
+    <div className="card w-full max-w-md space-y-7 p-8 sm:p-10">
+      <div className="space-y-3 text-center">
+        <div className="flex justify-center"><LogoMark width={42} height={42} /></div>
+        <h1 className="text-2xl font-bold">ورود به فضای شخصی</h1>
+        <p className="text-sm text-muted">RCA Agent · ورود امن با لینک ایمیل</p>
       </div>
 
       {sent ? (

@@ -9,6 +9,7 @@ export type Item = {
   priority: number;
   recurrence: "daily" | "weekly" | "monthly" | null;
   source: "manual" | "agent" | "email";
+  source_ref?: string | null;
   created_at: string;
 };
 
@@ -36,11 +37,14 @@ export type Dose = {
   scheduled_for: string;
   status: DoseStatus;
   taken_at: string | null;
+  snooze_until?: string | null;
   medications: Pick<Medication, "name" | "dosage" | "instructions" | "color"> | null;
 };
 
 export type Email = {
   id: string;
+  account_id: string;
+  provider_id: string;
   from_addr: string | null;
   subject: string | null;
   snippet: string | null;
@@ -86,4 +90,3 @@ export const KIND_LABELS: Record<ItemKind, string> = {
 };
 
 export const PRIORITY_LABELS = ["کم", "عادی", "مهم", "فوری"];
-
