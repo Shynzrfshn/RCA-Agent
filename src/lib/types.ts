@@ -72,6 +72,7 @@ export type ChatMessage = {
 export type Profile = {
   ai_sensitive_enabled: boolean;
   morning_email_enabled?: boolean;
+  focus_mode_enabled?: boolean;
   user_id: string;
   display_name: string | null;
   timezone: string;
