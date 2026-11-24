@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
-import { MailIcon, RefreshIcon } from "@/components/Icons";
+import { MailIcon, RefreshIcon, SearchIcon } from "@/components/Icons";
 import { Empty, ErrorNote, Section } from "@/components/ui";
 import { callFunction } from "@/lib/api";
 import { relative, toFa } from "@/lib/format";
@@ -17,6 +17,7 @@ const CATS: { key: Email["category"]; label: string; cls: string }[] = [
   { key: "promo", label: "تبلیغاتی", cls: "bg-surface-2 text-muted" },
   { key: "spam", label: "اسپم", cls: "bg-surface-2 text-muted" },
 ];
+const PAGE_SIZE = 50;
 
 export default function InboxPage() {
   const supabase = createClient();
@@ -27,23 +28,33 @@ export default function InboxPage() {
   const [showLow, setShowLow] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [taskDone, setTaskDone] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState<Record<string, number>>({});
 
   const load = useCallback(async () => {
-    const [acc, em] = await Promise.all([
+    let emailQuery = supabase
+      .from("emails")
+      .select("id, account_id, provider_id, from_addr, subject, snippet, summary, category, action_needed, is_read, received_at", { count: "exact" })
+      .order("received_at", { ascending: false });
+    const term = search.trim().replace(/[%_,()]/g, " ");
+    if (term) emailQuery = emailQuery.or(`subject.ilike.%${term}%,from_addr.ilike.%${term}%,summary.ilike.%${term}%`);
+    const countQueries = CATS.map((cat) => supabase.from("emails").select("id", { count: "exact", head: true }).eq("category", cat.key).eq("is_read", false));
+    const [acc, em, ...categoryCounts] = await Promise.all([
       supabase.from("email_accounts").select("id, email, last_synced_at, last_error"),
-      supabase
-        .from("emails")
-        .select("id, account_id, provider_id, from_addr, subject, snippet, summary, category, action_needed, is_read, received_at")
-        .order("received_at", { ascending: false })
-        .limit(150),
+      emailQuery.range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1),
+      ...countQueries,
     ]);
     if (acc.error) setError(acc.error.message);
     setAccounts((acc.data as EmailAccount[]) ?? []);
     setEmails((em.data as Email[]) ?? []);
+    setTotal(em.count ?? 0);
+    setCounts(Object.fromEntries(CATS.map((cat, index) => [cat.key, categoryCounts[index]?.count ?? 0])));
     const ref = new URLSearchParams(window.location.search).get("ref");
     const target = (em.data as Email[] | null)?.find((e) => `${e.account_id}:${e.provider_id}` === ref);
     if (target) setExpanded(target.id);
-  }, [supabase]);
+  }, [supabase, search, page]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load
@@ -80,9 +91,6 @@ export default function InboxPage() {
     else setTaskDone(e.id);
   }
 
-  const counts = Object.fromEntries(
-    CATS.map((c) => [c.key, emails.filter((e) => e.category === c.key && !e.is_read).length]),
-  );
   const visibleCats = CATS.filter((c) => showLow || !["promo", "spam"].includes(c.key));
 
   return (
@@ -116,6 +124,7 @@ export default function InboxPage() {
 
         {!!accounts?.length && (
           <>
+            <label className="relative block"><SearchIcon width={17} height={17} className="absolute right-3 top-3.5 text-muted" /><span className="sr-only">جست‌وجوی ایمیل‌ها</span><input className="field pr-10" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="جست‌وجو در موضوع، فرستنده و خلاصه" /></label>
             <div className="flex flex-wrap gap-2">
               {accounts.map((a) => (
                 <span key={a.id} className="rounded-full bg-surface-2 px-3 py-1 text-xs text-muted" dir="ltr">
@@ -136,7 +145,7 @@ export default function InboxPage() {
             </div>
 
             {emails.length === 0 ? (
-              <Empty>هنوز ایمیلی همگام نشده. «همگام‌سازی» رو بزن.</Empty>
+              <Empty>{search ? "ایمیلی با این عبارت پیدا نشد." : "هنوز ایمیلی همگام نشده. «همگام‌سازی» رو بزن."}</Empty>
             ) : (
               visibleCats.map((c) => {
                 const list = emails.filter((e) => e.category === c.key);
@@ -181,9 +190,11 @@ export default function InboxPage() {
               <input type="checkbox" checked={showLow} onChange={(e) => setShowLow(e.target.checked)} className="accent-[var(--accent)]" />
               نمایش تبلیغاتی و اسپم
             </label>
+            {total > PAGE_SIZE && <nav className="flex items-center justify-center gap-3" aria-label="صفحه‌بندی ایمیل‌ها"><button className="btn btn-ghost" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>صفحهٔ قبل</button><span className="text-sm text-muted">{toFa((page - 1) * PAGE_SIZE + 1)} تا {toFa(Math.min(page * PAGE_SIZE, total))} از {toFa(total)}</span><button className="btn btn-ghost" disabled={page * PAGE_SIZE >= total} onClick={() => setPage((p) => p + 1)}>صفحهٔ بعد</button></nav>}
           </>
         )}
       </div>
     </AppShell>
   );
 }
+
