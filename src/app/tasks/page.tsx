@@ -24,6 +24,7 @@ const PRIORITY_STYLES = [
   "bg-warning-soft text-warning",
   "bg-danger-bg text-danger",
 ];
+const PAGE_SIZE = 50;
 
 export default function TasksPage() {
   const supabase = createClient();
@@ -34,16 +35,28 @@ export default function TasksPage() {
   const [day, setDay] = useState("");
   const [editing, setEditing] = useState<Item | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
 
   const load = useCallback(async () => {
-    let q = supabase.from("items").select("*").eq("done", showDone).limit(300);
+    let q = supabase.from("items").select("*", { count: "exact" }).eq("done", showDone);
+    if (filter !== "all") q = q.eq("kind", filter);
+    const term = search.trim().replace(/[%_]/g, "");
+    if (term) q = q.ilike("content", `%${term}%`);
+    if (day) {
+      const start = new Date(`${day}T00:00:00`);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+      q = q.gte("due_at", start.toISOString()).lt("due_at", end.toISOString());
+    }
     q = showDone
       ? q.order("completed_at", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false })
       : q.order("due_at", { ascending: true, nullsFirst: false }).order("created_at", { ascending: false });
-    const { data, error } = await q;
+    const { data, error, count } = await q.range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
     if (error) setError(error.message);
     setItems((data as Item[]) ?? []);
-  }, [supabase, showDone]);
+    setTotal(count ?? 0);
+  }, [supabase, showDone, filter, search, day, page]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- data load on filter change
@@ -79,26 +92,23 @@ export default function TasksPage() {
     else load();
   }
 
-  const visible = (items ?? []).filter((i) =>
-    (filter === "all" || i.kind === filter) &&
-    (!search.trim() || i.content.toLocaleLowerCase("fa").includes(search.trim().toLocaleLowerCase("fa"))) &&
-    (!day || (i.due_at && toLocalInput(i.due_at).slice(0, 10) === day)));
+  const visible = items ?? [];
   const now = new Date().toISOString();
   const week = Array.from({ length: 7 }, (_, n) => { const date = new Date(); date.setDate(date.getDate() + n); return { key: toLocalInput(date.toISOString()).slice(0, 10), label: n === 0 ? "امروز" : faDate(date, { weekday: "short", month: undefined, day: "numeric" }) }; });
 
   return (
-    <AppShell title="کارها و یادآوری‌ها" subtitle={items ? `${toFa(visible.length)} مورد` : undefined}>
+    <AppShell title="کارها و یادآوری‌ها" subtitle={items ? `${toFa(total)} مورد` : undefined}>
       <div className="space-y-6">
         {error && <ErrorNote>{error}</ErrorNote>}
         <NewItemForm key={editing?.id ?? "new"} initial={editing} onAdded={() => { setEditing(null); load(); }} onCancel={() => setEditing(null)} />
 
         <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-          <label className="relative block"><SearchIcon width={17} height={17} className="absolute right-3 top-3.5 text-muted" /><span className="sr-only">جست‌وجوی کارها</span><input className="field pr-10" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="جست‌وجو در کارها و یادداشت‌ها" /></label>
-          <input type="date" className="field sm:w-44" aria-label="فیلتر تاریخ" value={day} onChange={(e) => setDay(e.target.value)} />
+          <label className="relative block"><SearchIcon width={17} height={17} className="absolute right-3 top-3.5 text-muted" /><span className="sr-only">جست‌وجوی کارها</span><input className="field pr-10" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="جست‌وجو در کارها و یادداشت‌ها" /></label>
+          <input type="date" className="field sm:w-44" aria-label="فیلتر تاریخ" value={day} onChange={(e) => { setDay(e.target.value); setPage(1); }} />
         </div>
         <div className="flex gap-2 overflow-x-auto pb-1" aria-label="نمای هفت روز آینده">
-          <button type="button" aria-pressed={!day} onClick={() => setDay("")} className={`min-h-11 shrink-0 rounded-lg border px-4 text-sm ${!day ? "border-accent bg-accent-soft text-accent" : "border-border bg-surface"}`}>همهٔ روزها</button>
-          {week.map((d) => <button key={d.key} type="button" aria-pressed={day === d.key} onClick={() => setDay(day === d.key ? "" : d.key)} className={`min-h-11 shrink-0 rounded-lg border px-4 text-sm ${day === d.key ? "border-accent bg-accent-soft text-accent" : "border-border bg-surface"}`}>{d.label}</button>)}
+          <button type="button" aria-pressed={!day} onClick={() => { setDay(""); setPage(1); }} className={`min-h-11 shrink-0 rounded-lg border px-4 text-sm ${!day ? "border-accent bg-accent-soft text-accent" : "border-border bg-surface"}`}>همهٔ روزها</button>
+          {week.map((d) => <button key={d.key} type="button" aria-pressed={day === d.key} onClick={() => { setDay(day === d.key ? "" : d.key); setPage(1); }} className={`min-h-11 shrink-0 rounded-lg border px-4 text-sm ${day === d.key ? "border-accent bg-accent-soft text-accent" : "border-border bg-surface"}`}>{d.label}</button>)}
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -108,7 +118,7 @@ export default function TasksPage() {
                 key={f.value}
                 role="tab"
                 aria-selected={filter === f.value}
-                onClick={() => setFilter(f.value)}
+                onClick={() => { setFilter(f.value); setPage(1); }}
                 className={`rounded-lg px-3 py-1.5 text-sm transition ${
                   filter === f.value ? "bg-surface font-semibold shadow-sm" : "text-muted"
                 }`}
@@ -118,7 +128,7 @@ export default function TasksPage() {
             ))}
           </div>
           <label className="flex items-center gap-2 text-sm text-muted">
-            <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} className="accent-[var(--accent)]" />
+            <input type="checkbox" checked={showDone} onChange={(e) => { setShowDone(e.target.checked); setPage(1); }} className="accent-[var(--accent)]" />
             نمایش انجام‌شده‌ها
           </label>
         </div>
@@ -190,6 +200,7 @@ export default function TasksPage() {
             ))}
           </ul>
         )}
+        {total > PAGE_SIZE && <nav className="flex items-center justify-center gap-3" aria-label="صفحه‌بندی کارها"><button className="btn btn-ghost" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>صفحهٔ قبل</button><span className="text-sm text-muted">صفحهٔ {toFa(page)} از {toFa(Math.ceil(total / PAGE_SIZE))}</span><button className="btn btn-ghost" disabled={page * PAGE_SIZE >= total} onClick={() => setPage((p) => p + 1)}>صفحهٔ بعد</button></nav>}
       </div>
     </AppShell>
   );
@@ -291,3 +302,4 @@ function NewItemForm({ onAdded, onCancel, initial }: { onAdded: () => void; onCa
     </form>
   );
 }
+

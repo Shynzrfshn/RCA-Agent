@@ -53,7 +53,29 @@ async function contextBlock(ctx: ToolCtx, profile: Profile): Promise<string> {
     .join("\n");
 }
 
-export type AgentResult = { reply: string; actions: { tool: string; ok: boolean }[] };
+export type PendingAction = { tool: string; input: Record<string, unknown> };
+export type AgentResult = {
+  reply: string;
+  actions: { tool: string; ok: boolean }[];
+  pending_actions?: PendingAction[];
+};
+
+const WRITE_TOOLS = new Set([
+  "create_item", "update_item", "complete_item", "delete_item",
+  "add_medication", "update_medication", "log_dose", "remember", "forget",
+]);
+
+const ACTION_LABELS: Record<string, string> = {
+  create_item: "ساخت مورد جدید",
+  update_item: "ویرایش مورد",
+  complete_item: "تغییر وضعیت مورد",
+  delete_item: "حذف مورد",
+  add_medication: "ثبت دارو",
+  update_medication: "ویرایش دارو",
+  log_dose: "ثبت وضعیت دوز",
+  remember: "افزودن به حافظه",
+  forget: "حذف از حافظه",
+};
 
 /**
  * Runs the tool-use loop for one user turn.
@@ -85,6 +107,7 @@ export async function runAgent(opts: {
     },
   ];
   const actions: AgentResult["actions"] = [];
+  const pending: PendingAction[] = [];
 
   for (let i = 0; i < 10; i++) {
     const { message } = await chat({ messages, tools: TOOLS, maxTokens: 4000 });
@@ -98,6 +121,12 @@ export async function runAgent(opts: {
       let content: string;
       try {
         input = call.function.arguments ? JSON.parse(call.function.arguments) : {};
+        if (WRITE_TOOLS.has(call.function.name)) {
+          pending.push({ tool: call.function.name, input });
+          content = JSON.stringify({ pending_confirmation: true });
+          messages.push({ role: "tool", tool_call_id: call.id, content });
+          continue;
+        }
         const out = await runTool(call.function.name, input, ctx);
         actions.push({ tool: call.function.name, ok: true });
         await opts.admin.from("agent_actions").insert({
@@ -113,8 +142,57 @@ export async function runAgent(opts: {
       }
       messages.push({ role: "tool", tool_call_id: call.id, content });
     }
+    if (pending.length) {
+      const labels = pending.map((a) => ACTION_LABELS[a.tool] ?? a.tool).join("، ");
+      return {
+        reply: `این اقدام‌ها آماده‌اند و هنوز اجرا نشده‌اند: ${labels}. لطفاً جزئیات را بررسی و تأیید کن.`,
+        actions,
+        pending_actions: pending,
+      };
+    }
   }
   return { reply: "این درخواست بیش از حد طولانی شد؛ لطفاً ساده‌ترش کن.", actions };
+}
+
+export async function runConfirmedActions(opts: {
+  db: SupabaseClient;
+  admin: SupabaseClient;
+  userId: string;
+  pending: PendingAction[];
+}): Promise<AgentResult> {
+  const profile = await loadProfile(opts.db, opts.userId);
+  const ctx: ToolCtx = { db: opts.db, userId: opts.userId, tz: profile.timezone };
+  const actions: AgentResult["actions"] = [];
+  for (const action of opts.pending.slice(0, 10)) {
+    if (!WRITE_TOOLS.has(action.tool)) throw new Error("invalid_pending_action");
+    try {
+      await runTool(action.tool, action.input, ctx);
+      actions.push({ tool: action.tool, ok: true });
+      await opts.admin.from("agent_actions").insert({
+        user_id: opts.userId,
+        tool: action.tool,
+        input: { redacted: true },
+        result: { ok: true, confirmed: true },
+      });
+    } catch (error) {
+      actions.push({ tool: action.tool, ok: false });
+      await opts.admin.from("agent_actions").insert({
+        user_id: opts.userId,
+        tool: action.tool,
+        input: { redacted: true },
+        result: { ok: false, confirmed: true },
+      });
+      if (actions.length === 1) throw error;
+      break;
+    }
+  }
+  const succeeded = actions.filter((a) => a.ok).length;
+  return {
+    reply: succeeded === actions.length
+      ? `${succeeded} اقدام تأییدشده با موفقیت انجام شد.`
+      : `${succeeded} اقدام انجام شد و اجرای ادامه متوقف شد؛ وضعیت موارد را بررسی کن.`,
+    actions,
+  };
 }
 
 export type ReviewKind = "morning" | "evening" | "weekly";

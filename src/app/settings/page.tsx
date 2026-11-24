@@ -147,6 +147,36 @@ export default function SettingsPage() {
     router.replace("/login/");
   }
 
+  async function exportBackup() {
+    setBusy("backup");
+    setError(null);
+    try {
+      const tables = ["profiles", "items", "medications", "dose_logs", "emails", "briefings", "nudges", "memories", "agent_messages", "agent_actions"] as const;
+      const entries = await Promise.all(tables.map(async (table) => {
+        const { data, error } = await supabase.from(table).select("*");
+        if (error) throw new Error(`${table}: ${error.message}`);
+        return [table, data ?? []] as const;
+      }));
+      const payload = JSON.stringify({
+        format: "rca-agent-backup",
+        version: 1,
+        exported_at: new Date().toISOString(),
+        data: Object.fromEntries(entries),
+      }, null, 2);
+      const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `rca-agent-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setNotice({ ok: true, text: "فایل پشتیبان ساخته شد. آن را در جای امن نگه‌دار؛ ممکن است شامل اطلاعات شخصی باشد." });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <AppShell title="تنظیمات">
       <div className="max-w-2xl space-y-8 pb-6">
@@ -350,8 +380,16 @@ export default function SettingsPage() {
           </div>
         </Section>
 
+        <Section title="پشتیبان داده‌ها">
+          <div className="card flex flex-wrap items-center justify-between gap-4 p-5">
+            <div className="max-w-md text-sm leading-6"><div className="font-semibold">خروجی JSON از اطلاعات حساب</div><p className="text-muted">کارها، داروها، ایمیل‌های ذخیره‌شده، خلاصه‌ها و حافظه را دانلود می‌کند. کلیدها و توکن Gmail در فایل قرار نمی‌گیرند.</p></div>
+            <button type="button" onClick={exportBackup} disabled={busy === "backup"} className="btn btn-ghost">{busy === "backup" ? "در حال ساخت…" : "دریافت فایل پشتیبان"}</button>
+          </div>
+        </Section>
+
         <button onClick={signOut} className="btn btn-ghost w-full text-danger">خروج از حساب</button>
       </div>
     </AppShell>
   );
 }
+

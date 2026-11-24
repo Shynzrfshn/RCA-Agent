@@ -5,7 +5,7 @@ import AppShell from "@/components/AppShell";
 import { LogoMark, SendIcon, TrashIcon } from "@/components/Icons";
 import { PhotoButton, PhotoPreview } from "@/components/PhotoPicker";
 import { ErrorNote, Markdownish } from "@/components/ui";
-import { askAgent } from "@/lib/api";
+import { askAgent, resolveAgentActions, type PendingAgentAction } from "@/lib/api";
 import { faTime } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
 import type { ChatMessage } from "@/lib/types";
@@ -18,6 +18,7 @@ const SUGGESTIONS = [
 ];
 const TOOL_LABELS: Record<string, string> = { create_item: "ثبت کار", update_item: "ویرایش کار", complete_item: "تکمیل کار", add_medication: "ثبت دارو", search_emails: "جست‌وجوی ایمیل", get_overview: "بررسی برنامه", remember: "ثبت در حافظه" };
 type Attempt = { msg: string; photo: string | null; requestId: string };
+type Pending = { requestId: string; actions: PendingAgentAction[] };
 
 export default function ChatPage() {
   const supabase = createClient();
@@ -29,6 +30,7 @@ export default function ChatPage() {
   const [image, setImage] = useState<string | null>(null);
   const [lastAttempt, setLastAttempt] = useState<Attempt | null>(null);
   const [actionLog, setActionLog] = useState<{ tool: string; ok: boolean }[]>([]);
+  const [pending, setPending] = useState<Pending | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -53,12 +55,14 @@ export default function ChatPage() {
     setImage(null);
     setError(null);
     setActionLog([]);
+    setPending(null);
     setBusy(true);
     const now = new Date().toISOString();
     if (!retry) setMessages((m) => [ ...m, { id: `local-${now}`, role: "user", content: photo ? `[تصویر] ${msg}`.trim() : msg, created_at: now } ]);
     try {
       const res = await askAgent(msg, photo ?? undefined, requestId);
       setActionLog(res.actions);
+      if (res.pending_actions?.length) setPending({ requestId, actions: res.pending_actions });
       setLastAttempt(null);
       setMessages((m) => [
         ...m,
@@ -67,6 +71,24 @@ export default function ChatPage() {
     } catch (e) {
       setError((e as Error).message);
       setLastAttempt({ msg, photo, requestId });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resolvePending(action: "confirm" | "cancel") {
+    if (!pending || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await resolveAgentActions(pending.requestId, action);
+      setActionLog(res.actions);
+      setMessages((m) => [...m, { id: `resolution-${Date.now()}`, role: "assistant", content: res.reply, created_at: new Date().toISOString() }]);
+      setPending(null);
+    } catch (e) {
+      setError((e as Error).message === "request_failed_use_new_id"
+        ? "نتیجهٔ اقدام قبلی قطعی نیست. ابتدا وضعیت کارها و داروها را بررسی کن، سپس درخواست تازه بفرست."
+        : (e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -132,6 +154,7 @@ export default function ChatPage() {
             </div>
           )}
           {actionLog.length > 0 && <div className="card mr-auto max-w-lg p-4 text-sm" role="status"><div className="mb-2 font-semibold">اقدام‌های این پاسخ</div><ul className="space-y-1.5">{actionLog.map((a, i) => <li key={`${a.tool}-${i}`} className="flex items-center justify-between gap-4"><span>{TOOL_LABELS[a.tool] ?? a.tool.replaceAll("_", " ")}</span><span className={a.ok ? "text-success" : "text-danger"}>{a.ok ? "انجام شد" : "ناموفق"}</span></li>)}</ul></div>}
+          {pending && <div className="card mr-auto max-w-lg border-r-[3px] border-r-warning p-4 text-sm" role="alert"><div className="font-bold">تأیید پیش از اجرا</div><p className="mt-1 leading-6 text-muted">ایجنت این تغییرها را پیشنهاد داده است. تا وقتی تأیید نکنی هیچ‌کدام اجرا نمی‌شوند.</p><ul className="my-3 space-y-2">{pending.actions.map((a, i) => <li key={`${a.tool}-${i}`} className="rounded-lg bg-surface-2 p-3"><strong>{TOOL_LABELS[a.tool] ?? a.tool.replaceAll("_", " ")}</strong><pre className="mt-1 overflow-x-auto whitespace-pre-wrap text-xs text-muted" dir="auto">{JSON.stringify(a.input, null, 2)}</pre></li>)}</ul><div className="flex gap-2"><button type="button" className="btn btn-primary" onClick={() => resolvePending("confirm")}>تأیید و اجرا</button><button type="button" className="btn btn-ghost" onClick={() => resolvePending("cancel")}>لغو</button></div></div>}
           {error && <div><ErrorNote>{error}</ErrorNote>{lastAttempt && <button type="button" className="btn btn-ghost mt-2" onClick={() => send(lastAttempt.msg, lastAttempt)}>تلاش دوباره</button>}</div>}
           <div ref={endRef} />
         </div>
@@ -172,3 +195,4 @@ export default function ChatPage() {
     </AppShell>
   );
 }
+
