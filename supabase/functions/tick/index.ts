@@ -8,6 +8,7 @@ import { sign } from "../_shared/crypto.ts";
 import { faTime, localParts } from "../_shared/time.ts";
 import { generateReview, type ReviewKind } from "../_shared/agent.ts";
 import { computeNudges } from "../_shared/nudges.ts";
+import { sendMorningEmail } from "../_shared/morningEmail.ts";
 
 type ProfileRow = {
   user_id: string;
@@ -19,6 +20,7 @@ type ProfileRow = {
   weekly_day: number;
   nudges_enabled: boolean;
   ai_sensitive_enabled: boolean;
+  morning_email_enabled: boolean;
 };
 type LP = ReturnType<typeof localParts>;
 const DOW: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
@@ -31,13 +33,13 @@ serve(async (req) => {
   if (!isCron(req)) throw new HttpError(401, "unauthorized");
   const admin = adminClient();
   const now = new Date();
-  const stats = { doses: 0, missed: 0, items: 0, refills: 0, briefings: 0, nudges: 0 };
+  const stats = { doses: 0, missed: 0, items: 0, refills: 0, briefings: 0, nudges: 0, morningEmails: 0 };
 
   await admin.rpc("ensure_dose_logs", { p_days: 2, p_user: null });
 
   const { data: profiles } = await admin
     .from("profiles")
-    .select("user_id, timezone, briefing_hour, briefing_enabled, evening_hour, evening_enabled, weekly_day, nudges_enabled, ai_sensitive_enabled");
+    .select("user_id, timezone, briefing_hour, briefing_enabled, evening_hour, evening_enabled, weekly_day, nudges_enabled, ai_sensitive_enabled, morning_email_enabled");
   const tzOf = new Map((profiles ?? []).map((p) => [p.user_id, p.timezone as string]));
   const tz = (uid: string) => tzOf.get(uid) ?? "Asia/Tehran";
 
@@ -162,7 +164,7 @@ serve(async (req) => {
         stats.briefings++;
       } catch (err) {
         console.error("review failed", k.kind, p.user_id, err);
-        await admin.from("briefings").delete()
+        await admin.from("briefings").update({ content: "ساخت خلاصه امروز ناموفق بود؛ بعداً دوباره تلاش کنید." })
           .eq("user_id", p.user_id).eq("day", lp.date).eq("kind", k.kind);
       }
     }
@@ -183,6 +185,39 @@ serve(async (req) => {
       }
     } catch (err) {
       console.error("nudges failed", p.user_id, err);
+    }
+  }
+
+  // Opt-in email, once per local day. Claim before the external send so a
+  // repeated cron invocation cannot send the same brief twice.
+  if (Deno.env.get("BREVO_API_KEY") && Deno.env.get("MORNING_EMAIL_FROM")) {
+    for (const p of (profiles ?? []) as ProfileRow[]) {
+      if (stats.morningEmails >= 3) break;
+      const lp = localParts(p.timezone);
+      if (!p.morning_email_enabled || !p.briefing_enabled || !p.ai_sensitive_enabled || lp.hour !== p.briefing_hour) continue;
+      const { count } = await admin.from("morning_email_deliveries")
+        .select("id", { count: "exact", head: true }).eq("day", lp.date);
+      if ((count ?? 0) >= 200) break; // below the provider's published free daily cap
+      const { data: brief } = await admin.from("briefings").select("content")
+        .eq("user_id", p.user_id).eq("day", lp.date).eq("kind", "morning").maybeSingle();
+      if (!brief?.content || brief.content === "در حال آماده‌سازی…" || brief.content.startsWith("ساخت خلاصه امروز ناموفق بود")) continue;
+      const { error: claimError } = await admin.from("morning_email_deliveries")
+        .insert({ user_id: p.user_id, day: lp.date, status: "claimed" });
+      if (claimError) continue;
+      try {
+        const { data: account, error: accountError } = await admin.auth.admin.getUserById(p.user_id);
+        if (accountError || !account.user?.email) throw new Error("account_email_unavailable");
+        const messageId = await sendMorningEmail(account.user.email, brief.content, lp.date);
+        await admin.from("morning_email_deliveries")
+          .update({ status: "sent", provider_message_id: messageId, updated_at: new Date().toISOString() })
+          .eq("user_id", p.user_id).eq("day", lp.date);
+        stats.morningEmails++;
+      } catch (error) {
+        const code = error instanceof Error ? error.message.slice(0, 80) : "send_failed";
+        await admin.from("morning_email_deliveries")
+          .update({ status: "failed", error_code: code, updated_at: new Date().toISOString() })
+          .eq("user_id", p.user_id).eq("day", lp.date);
+      }
     }
   }
 

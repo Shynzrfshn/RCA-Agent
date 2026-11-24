@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
-import { CheckIcon, ClockIcon, MailIcon, PillIcon, SparkIcon } from "@/components/Icons";
+import { CheckIcon, ClockIcon, MailIcon, PillIcon } from "@/components/Icons";
 import { Empty, ErrorNote, ProgressRing, Section, StatCard } from "@/components/ui";
 import { completeItem, loadDoses, loadOpenItems, setDoseStatus, todayBounds } from "@/lib/data";
 import { faDate, faTime, faWhen, greeting, toFa } from "@/lib/format";
@@ -17,6 +17,7 @@ export default function DashboardPage() {
   const [items, setItems] = useState<Item[] | null>(null);
   const [doses, setDoses] = useState<Dose[]>([]);
   const [urgentMail, setUrgentMail] = useState(0);
+  const [completedToday, setCompletedToday] = useState(0);
   const [adherence, setAdherence] = useState<{ taken: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,6 +45,9 @@ export default function DashboardPage() {
         total: rows.reduce((a, r) => a + r.total, 0),
       });
     });
+    supabase.from("items").select("id", { count: "exact", head: true })
+      .eq("done", true).gte("completed_at", start).lt("completed_at", end)
+      .then(({ count }) => setCompletedToday(count ?? 0));
   }, [supabase]);
 
   useEffect(() => {
@@ -59,6 +63,8 @@ export default function DashboardPage() {
   const overdue = dueToday.filter((i) => i.due_at! < new Date().toISOString());
   const takenToday = doses.filter((d) => d.status === "taken").length;
   const missedDoses = doses.filter((d) => d.status === "missed").length;
+  const progressTotal = completedToday + dueToday.length + doses.length;
+  const progress = progressTotal ? Math.round(((completedToday + takenToday) / progressTotal) * 100) : 0;
 
   const timeline = useMemo(() => {
     const rows = [
@@ -90,9 +96,21 @@ export default function DashboardPage() {
   }
 
   return (
-    <AppShell title={greeting()} subtitle={faDate(new Date(), { year: "numeric" })}>
-      <div className="space-y-8">
+    <AppShell title="امروز، با تمرکز بیشتر" subtitle={`${greeting()} · ${faDate(new Date(), { year: "numeric" })}`}>
+      <div className="dashboard space-y-6 pb-8">
         {error && <ErrorNote>{error}</ErrorNote>}
+        <div className="grid gap-3 lg:grid-cols-[1.6fr_1fr]">
+          <div className="card grid grid-cols-3 divide-x divide-x-reverse divide-border overflow-hidden p-2 sm:p-3">
+            <StatCard label="کارهای امروز" value={toFa(dueToday.length)} hint={overdue.length ? `${toFa(overdue.length)} عقب‌افتاده` : "در برنامه"} tone={overdue.length ? "danger" : "accent"} icon={<CheckIcon width={16} height={16} />} />
+            <StatCard label="دوز دارو" value={`${toFa(takenToday)}/${toFa(doses.length)}`} hint="ثبت امروز" tone="success" icon={<PillIcon width={16} height={16} />} />
+            <StatCard label="ایمیل فوری" value={toFa(urgentMail)} hint="نیازمند بررسی" tone={urgentMail ? "warning" : "accent"} icon={<MailIcon width={16} height={16} />} />
+          </div>
+          <section className="card flex flex-col justify-center p-5" aria-label="پیشرفت امروز">
+            <div className="flex items-end justify-between"><h2 className="text-sm font-bold">پیشرفت امروز</h2><strong className="text-3xl tabular-nums text-accent">{toFa(progress)}٪</strong></div>
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="پیشرفت امروز"><div className="h-full rounded-full bg-accent transition-all" style={{ width: `${progress}%` }} /></div>
+            <p className="mt-2 text-xs text-muted">کارهای تکمیل‌شده و دوزهای ثبت‌شده در امروز</p>
+          </section>
+        </div>
 
         <SmartCapture onChanged={load} />
 
@@ -107,38 +125,7 @@ export default function DashboardPage() {
 
         <NudgesCard />
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatCard
-            label="کارهای امروز"
-            value={toFa(dueToday.length)}
-            hint={overdue.length ? `${toFa(overdue.length)} عقب‌افتاده` : "همه سر وقت"}
-            tone={overdue.length ? "danger" : "accent"}
-            icon={<CheckIcon width={16} height={16} />}
-          />
-          <StatCard
-            label="داروهای امروز"
-            value={`${toFa(takenToday)}/${toFa(doses.length)}`}
-            hint={doses.length ? "دوز مصرف‌شده" : "دارویی ثبت نشده"}
-            tone="success"
-            icon={<PillIcon width={16} height={16} />}
-          />
-          <StatCard
-            label="ایمیل فوری"
-            value={toFa(urgentMail)}
-            hint={<Link href="/inbox/" className="underline-offset-2 hover:underline">صندوق ورودی</Link>}
-            tone={urgentMail ? "warning" : "accent"}
-            icon={<MailIcon width={16} height={16} />}
-          />
-          <StatCard
-            label="پایبندی ۷ روز"
-            value={adherence?.total ? `${toFa(Math.round((adherence.taken / adherence.total) * 100))}٪` : "—"}
-            hint="مصرف به‌موقع دارو"
-            tone="success"
-            icon={<SparkIcon width={16} height={16} />}
-          />
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+        <div className="grid gap-5 lg:grid-cols-[1.25fr_1fr]">
           <Section title="برنامه‌ی امروز">
             {items === null ? (
               <div className="card h-40 animate-pulse" />
@@ -207,6 +194,7 @@ export default function DashboardPage() {
 
           <Section title="مرور ایجنت">
             <ReviewsCard />
+            <div className="mt-3 card flex items-center justify-between p-4 text-sm"><span>پایبندی دارو در ۷ روز</span><strong className="text-accent">{adherence?.total ? `${toFa(Math.round((adherence.taken / adherence.total) * 100))}٪` : "—"}</strong></div>
             {doses.length > 0 && (
               <div className="card flex items-center gap-4 p-4">
                 <ProgressRing value={takenToday} total={doses.length} label="دوز امروز" />
@@ -224,3 +212,4 @@ export default function DashboardPage() {
     </AppShell>
   );
 }
+

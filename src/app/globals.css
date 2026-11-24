@@ -103,9 +103,14 @@ body {
   font-family: var(--font-sans);
   font-feature-settings: "ss01";
 }
-.app-frame { background: radial-gradient(circle at 75% -20%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 44%), var(--background); }
-.app-sidebar { background: var(--surface); }
-.nav-link.is-active { box-shadow: inset -3px 0 var(--accent); }
+.app-frame { background: var(--background); }
+.app-sidebar { background: #10212b; color: #f5faf8; border-color: #34454c; }
+.app-sidebar .text-muted { color: #a8b8b9; }
+.app-sidebar .nav-link:not(.is-active) { color: #c4d1d0; }
+.app-sidebar .nav-link:not(.is-active):hover { background: #1c3540; color: #fff; }
+.app-sidebar .nav-link.is-active { background: #184e4a; color: #ddf9ed; box-shadow: inset -3px 0 #72d5b5; }
+.dashboard .card { box-shadow: 0 8px 28px -25px rgb(20 45 41 / .35); }
+.dashboard .card .card { box-shadow: none; }
 .mobile-nav { box-shadow: 0 -12px 40px -28px rgb(0 0 0 / .25); }
 .landing { background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 5%, var(--background)), var(--background) 48%); }
 .hero-preview { background: color-mix(in srgb, var(--surface) 88%, var(--accent-soft)); box-shadow: 24px 24px 0 -9px color-mix(in srgb, var(--accent) 9%, transparent); }
