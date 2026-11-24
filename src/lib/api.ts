@@ -26,7 +26,16 @@ export async function callFunction<T>(
   return data as T;
 }
 
-export type AgentReply = { reply: string; actions: { tool: string; ok: boolean }[] };
+export type PendingAgentAction = { tool: string; input: Record<string, unknown> };
+export type AgentReply = {
+  reply: string;
+  actions: { tool: string; ok: boolean }[];
+  pending_actions?: PendingAgentAction[];
+};
 
 export const askAgent = (message: string, image?: string, requestId = crypto.randomUUID()) =>
   callFunction<AgentReply>("agent", image ? { message, image, request_id: requestId } : { message, request_id: requestId });
+
+export const resolveAgentActions = (requestId: string, action: "confirm" | "cancel") =>
+  callFunction<AgentReply>("agent", { action, request_id: requestId });
+
