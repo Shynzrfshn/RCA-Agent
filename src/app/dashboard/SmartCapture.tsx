@@ -5,29 +5,13 @@ import { useId, useState } from "react";
 import { SendIcon, SparkIcon } from "@/components/Icons";
 import { PhotoButton, PhotoPreview } from "@/components/PhotoPicker";
 import { Markdownish } from "@/components/ui";
-import { askAgent } from "@/lib/api";
+import { askAgent, resolveAgentActions, type PendingAgentAction } from "@/lib/api";
 import { addItem } from "@/lib/data";
 import { createClient } from "@/lib/supabase/client";
-import { fromLocalInput, toLocalInput } from "@/lib/format";
+import { fromLocalInput } from "@/lib/format";
+import { parsePersianDraft, type LocalDraft } from "@/lib/persianDate";
 
-type Draft = { content: string; due: string; recurrence: "" | "daily" | "weekly" | "monthly"; priority: number };
-const ascii = (s: string) => s.replace(/[۰-۹٠-٩]/g, (c) => String("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩".indexOf(c) % 10));
-function draftFromText(input: string): Draft {
-  const normalized = ascii(input.trim());
-  const date = new Date();
-  const tomorrow = /فردا/.test(normalized);
-  if (tomorrow) date.setDate(date.getDate() + 1);
-  const time = normalized.match(/(?:ساعت\s*)?(\d{1,2})(?::(\d{2}))?\s*(صبح|ظهر|عصر|شب)/);
-  const explicit = normalized.match(/ساعت\s*(\d{1,2})(?::(\d{2}))?/);
-  const match = time ?? explicit;
-  if (match) {
-    let h = Number(match[1]);
-    const period = time?.[3];
-    if ((period === "عصر" || period === "شب" || period === "ظهر") && h < 12) h += 12;
-    date.setHours(Math.min(h, 23), Number(match[2] ?? 0), 0, 0);
-  }
-  return { content: input.trim(), due: tomorrow || match ? toLocalInput(date.toISOString()) : "", recurrence: /هر\s*روز|روزانه/.test(input) ? "daily" : /هر\s*هفته|هفتگی/.test(input) ? "weekly" : /هر\s*ماه|ماهانه/.test(input) ? "monthly" : "", priority: /فوری|اضطراری/.test(input) ? 3 : /مهم/.test(input) ? 2 : 1 };
-}
+type Draft = LocalDraft;
 
 const EXAMPLES = [
   "فردا ساعت ۹ صبح به دکتر زنگ بزنم",
@@ -44,18 +28,38 @@ export default function SmartCapture({ onChanged }: { onChanged: () => void }) {
   const [image, setImage] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [lastCreated, setLastCreated] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ requestId: string; actions: PendingAgentAction[] } | null>(null);
 
   async function sendToAgent() {
     if (!text.trim() && !image) return;
     setBusy("agent");
     setError(null);
     setReply(null);
+    setPending(null);
     try {
-      const res = await askAgent(text.trim(), image ?? undefined);
+      const requestId = crypto.randomUUID();
+      const res = await askAgent(text.trim(), image ?? undefined, requestId);
       setReply(res.reply);
+      if (res.pending_actions?.length) setPending({ requestId, actions: res.pending_actions });
       setText("");
       setImage(null);
       if (res.actions.length) onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function resolvePending(action: "confirm" | "cancel") {
+    if (!pending) return;
+    setBusy("agent");
+    setError(null);
+    try {
+      const res = await resolveAgentActions(pending.requestId, action);
+      setReply(res.reply);
+      setPending(null);
+      if (res.actions.some((a) => a.ok)) onChanged();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -103,7 +107,7 @@ export default function SmartCapture({ onChanged }: { onChanged: () => void }) {
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-            setDraft(draftFromText(text));
+            setDraft(parsePersianDraft(text));
           }
         }}
         rows={2}
@@ -122,7 +126,7 @@ export default function SmartCapture({ onChanged }: { onChanged: () => void }) {
         <div><label className="mb-1 block text-xs font-semibold">تکرار</label><select className="field" value={draft.recurrence} onChange={(e) => setDraft({ ...draft, recurrence: e.target.value as Draft["recurrence"] })}><option value="">بدون تکرار</option><option value="daily">روزانه</option><option value="weekly">هفتگی</option><option value="monthly">ماهانه</option></select></div>
         <div><label className="mb-1 block text-xs font-semibold">اولویت</label><select className="field" value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: Number(e.target.value) })}><option value="1">عادی</option><option value="2">مهم</option><option value="3">فوری</option></select></div>
         <div className="flex items-end gap-2"><button className="btn btn-primary" disabled={!!busy || !draft.content.trim()} onClick={quickAdd}>تأیید و ثبت</button><button className="btn btn-ghost" onClick={() => setDraft(null)}>انصراف</button></div>
-        <p className="text-xs leading-5 text-muted sm:col-span-2">زمان از متن به‌صورت محلی پیشنهاد شده است؛ قبل از ثبت آن را بررسی کن. این مرحله هیچ درخواست AI مصرف نمی‌کند.</p>
+        <p className={`text-xs leading-5 sm:col-span-2 ${draft.note ? "text-warning" : "text-muted"}`}>{draft.note ?? "زمان از متن به‌صورت محلی پیشنهاد شده است؛ قبل از ثبت آن را بررسی کن. این مرحله هیچ درخواست AI مصرف نمی‌کند."}</p>
       </div>}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-1.5">
@@ -139,7 +143,7 @@ export default function SmartCapture({ onChanged }: { onChanged: () => void }) {
         </div>
         <div className="flex gap-2">
           <PhotoButton onPick={setImage} onError={setError} disabled={!!busy} />
-          <button className="btn btn-ghost" onClick={() => setDraft(draftFromText(text))} disabled={!!busy || !text.trim() || !!image}>
+          <button className="btn btn-ghost" onClick={() => setDraft(parsePersianDraft(text))} disabled={!!busy || !text.trim() || !!image}>
             پیش‌نمایش ثبت
           </button>
           <button className="btn btn-primary" onClick={sendToAgent} disabled={!!busy || (!text.trim() && !image)}>
@@ -163,7 +167,9 @@ export default function SmartCapture({ onChanged }: { onChanged: () => void }) {
           )}
         </div>
       )}
+      {pending && <div className="mt-3 rounded-lg border border-warning bg-warning-soft p-4 text-sm"><strong>نیازمند تأیید</strong><p className="mt-1 text-muted">{pending.actions.length} تغییر پیشنهاد شده و هنوز اجرا نشده است.</p><div className="mt-3 flex gap-2"><button type="button" className="btn btn-primary" onClick={() => resolvePending("confirm")}>تأیید و اجرا</button><button type="button" className="btn btn-ghost" onClick={() => resolvePending("cancel")}>لغو</button></div></div>}
       {lastCreated && <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-success-soft px-4 py-2.5 text-sm text-success"><span>مورد ثبت شد.</span><button type="button" onClick={undo} className="font-bold underline underline-offset-4">بازگرداندن</button></div>}
     </div>
   );
 }
+
