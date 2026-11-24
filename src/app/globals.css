@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@fontsource-variable/vazirmatn";
 
 :root {
   --background: #f3f5f2;
@@ -92,7 +93,7 @@
   --color-danger: var(--danger);
   --color-danger-bg: var(--danger-bg);
   --color-ring: var(--ring);
-  --font-sans: "Vazirmatn", system-ui, sans-serif;
+  --font-sans: "Vazirmatn Variable", system-ui, sans-serif;
   --shadow-card: var(--shadow);
 }
 
@@ -211,3 +212,4 @@ button:disabled { cursor: not-allowed; }
     transition-duration: 0.01ms !important;
   }
 }
+
