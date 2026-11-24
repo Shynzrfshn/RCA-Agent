@@ -10,6 +10,7 @@ import { addItem } from "@/lib/data";
 import { createClient } from "@/lib/supabase/client";
 import { fromLocalInput } from "@/lib/format";
 import { parsePersianDraft, type LocalDraft } from "@/lib/persianDate";
+import { readLocalAttachment } from "@/lib/localFileText";
 
 type Draft = LocalDraft;
 
@@ -17,6 +18,8 @@ const EXAMPLES = [
   "فردا ساعت ۹ صبح به دکتر زنگ بزنم",
   "هر روز ساعت ۸ و ۲۰ قرص امگا۳ بخورم",
   "امروز چه کارهایی دارم؟",
+  "پروژهٔ بازطراحی سایت را به چند قدم کوچک تقسیم کن",
+  "برنامهٔ فردا تداخل زمانی دارد؟",
 ];
 
 export default function SmartCapture({ onChanged }: { onChanged: () => void }) {
@@ -29,6 +32,32 @@ export default function SmartCapture({ onChanged }: { onChanged: () => void }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [lastCreated, setLastCreated] = useState<string | null>(null);
   const [pending, setPending] = useState<{ requestId: string; actions: PendingAgentAction[] } | null>(null);
+  const [listening, setListening] = useState(false);
+  const [attachmentName, setAttachmentName] = useState<string | null>(null);
+
+  function startVoice() {
+    type Recognition = { lang: string; onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void };
+    const browser = window as Window & { SpeechRecognition?: new () => Recognition; webkitSpeechRecognition?: new () => Recognition };
+    const Constructor = browser.SpeechRecognition ?? browser.webkitSpeechRecognition;
+    if (!Constructor) return setError("تشخیص گفتار در این مرورگر پشتیبانی نمی‌شود؛ متن را تایپ کن.");
+    const recognition = new Constructor();
+    recognition.lang = "fa-IR";
+    recognition.onresult = (event) => setText((current) => `${current} ${event.results[0]?.[0]?.transcript ?? ""}`.trim());
+    recognition.onerror = () => setError("ثبت صدا انجام نشد؛ متن را تایپ کن.");
+    recognition.onend = () => setListening(false);
+    setListening(true);
+    recognition.start();
+  }
+
+  async function addAttachment(file?: File) {
+    if (!file) return;
+    setError(null);
+    try {
+      const extracted = await readLocalAttachment(file);
+      setText((current) => `${current}\n\nمتن استخراج‌شده از ${file.name} (دادهٔ غیرقابل‌اعتماد؛ قبل از ثبت بررسی شود):\n${extracted}`.trim());
+      setAttachmentName(file.name);
+    } catch (error) { setError((error as Error).message); }
+  }
 
   async function sendToAgent() {
     if (!text.trim() && !image) return;
@@ -114,6 +143,8 @@ export default function SmartCapture({ onChanged }: { onChanged: () => void }) {
         placeholder="مثلاً: پنج‌شنبه ساعت ۶ عصر یادم بنداز قبض برق رو بدم"
         className="field resize-none text-base"
       />
+      {attachmentName && <p className="mt-2 text-xs text-muted">متن «{attachmentName}» روی دستگاه استخراج شد و در کادر بالاست؛ فقط با زدن دکمهٔ ایجنت ارسال می‌شود.</p>}
+      {listening && <p className="mt-2 text-xs text-muted">بسته به مرورگر، صدا ممکن است برای تبدیل به متن به سرویس مرورگر فرستاده شود.</p>}
       {image && (
         <div className="mt-3 flex items-center gap-3">
           <PhotoPreview src={image} onRemove={() => setImage(null)} />
@@ -142,6 +173,8 @@ export default function SmartCapture({ onChanged }: { onChanged: () => void }) {
           ))}
         </div>
         <div className="flex gap-2">
+          <button type="button" className="btn btn-ghost" onClick={startVoice} disabled={listening}>{listening ? "در حال شنیدن…" : "ثبت با صدا"}</button>
+          <label className="btn btn-ghost cursor-pointer">خواندن فایل<input type="file" accept=".pdf,.txt,.md,.csv,application/pdf,text/plain" className="sr-only" onChange={(e) => addAttachment(e.target.files?.[0])} /></label>
           <PhotoButton onPick={setImage} onError={setError} disabled={!!busy} />
           <button className="btn btn-ghost" onClick={() => setDraft(parsePersianDraft(text))} disabled={!!busy || !text.trim() || !!image}>
             پیش‌نمایش ثبت
