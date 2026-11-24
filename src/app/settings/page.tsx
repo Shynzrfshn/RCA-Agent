@@ -66,6 +66,7 @@ export default function SettingsPage() {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Tehran",
         briefing_hour: 7,
         briefing_enabled: true,
+        morning_email_enabled: false,
         evening_hour: 21,
         evening_enabled: true,
         weekly_day: 5,
@@ -292,6 +293,12 @@ export default function SettingsPage() {
                   onChange={(e) => setProfile({ ...profile, ai_sensitive_enabled: e.target.checked })}
                   className="mt-1 accent-[var(--accent)]" />
                 اجازه می‌دهم محتوای ایمیل، دارو، کارها و حافظه برای پاسخ ایجنت و خلاصه‌ها به سرویس‌های هوش مصنوعی فعال ارسال شود. با خاموش‌بودن، تحلیل ایمیل و خلاصه‌های خودکار انجام نمی‌شود.
+              </label>
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" checked={profile.morning_email_enabled ?? false}
+                  onChange={(e) => setProfile({ ...profile, morning_email_enabled: e.target.checked })}
+                  className="mt-1 accent-[var(--accent)]" />
+                هر روز صبح خلاصهٔ شخصی برنامه، دارو و ایمیل‌های مهم را به ایمیل حسابم بفرست. این قابلیت به رضایت AI و راه‌اندازی سرویس ارسال رایگان نیاز دارد و هر زمان می‌توانم خاموشش کنم.
               </label>
               <div className="flex justify-end">
                 <button type="submit" className="btn btn-primary">{saved ? "ذخیره شد ✓" : "ذخیره"}</button>
