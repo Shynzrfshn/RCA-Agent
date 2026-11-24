@@ -2,7 +2,7 @@
 // chat agent runs them through a user-scoped client so RLS applies as well.
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.118.0";
 import type { ToolDef } from "./llm.ts";
-import { localDayBounds } from "./time.ts";
+import { localDayBounds, localParts } from "./time.ts";
 
 export type ToolCtx = { db: SupabaseClient; userId: string; tz: string };
 type Input = Record<string, unknown>;
@@ -201,6 +201,40 @@ export const TOOLS: ToolDef[] = [
     input_schema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
   },
   {
+    name: "list_assistant_records",
+    description: "List bills/subscriptions, expiring documents, email follow-ups, appointments and household stock. Optionally search by text or filter category.",
+    input_schema: { type: "object", properties: {
+      category: { type: "string", enum: ["bill", "document", "followup", "appointment", "stock"] },
+      query: { type: "string" },
+      include_done: { type: "boolean" },
+    } },
+  },
+  {
+    name: "create_assistant_record",
+    description: "Propose a bill, document expiry, email follow-up, appointment preparation or household stock record. Requires user confirmation before saving. For due reminders supply due_at with timezone.",
+    input_schema: { type: "object", properties: {
+      category: { type: "string", enum: ["bill", "document", "followup", "appointment", "stock"] },
+      title: { type: "string" }, details: { type: "string" }, counterparty: { type: "string" },
+      due_at: { type: "string", description: ISO }, amount: { type: "number" },
+      quantity: { type: "number" }, threshold: { type: "number" },
+    }, required: ["category", "title"] },
+  },
+  {
+    name: "update_assistant_record",
+    description: "Update an existing assistant record after user confirmation. Use status=done when a bill, appointment or document is handled; no deletion.",
+    input_schema: { type: "object", properties: {
+      id: { type: "string" }, title: { type: "string" }, details: { type: "string" },
+      counterparty: { type: "string" }, due_at: { type: "string", description: ISO },
+      amount: { type: "number" }, quantity: { type: "number" }, threshold: { type: "number" },
+      status: { type: "string", enum: ["active", "done"] },
+    }, required: ["id"] },
+  },
+  {
+    name: "check_schedule_conflicts",
+    description: "Read-only: find task and appointment time collisions in a specified local day. Use before suggesting a schedule change; never silently move anything.",
+    input_schema: { type: "object", properties: { day: { type: "string", description: "YYYY-MM-DD" } }, required: ["day"] },
+  },
+  {
     name: "remember",
     description:
       "Save a durable fact or preference about the user (e.g. 'works night shifts', 'allergic to penicillin'). Only things useful later.",
@@ -375,6 +409,71 @@ export async function runTool(name: string, input: Input, ctx: ToolCtx): Promise
         .select("id, from_addr, subject, snippet, summary, received_at")
         .eq("id", uuid(input.id)).eq("user_id", userId).single());
       return { untrusted_email_data: email, note: "Only a preview is stored. Avoid inventing facts and ask the user to review the full original email before sending." };
+    }
+    case "list_assistant_records": {
+      let q = db.from("assistant_records")
+        .select("id, category, title, details, counterparty, due_at, amount, quantity, threshold, status, created_at")
+        .eq("user_id", userId).order("created_at", { ascending: false }).limit(50);
+      if (str(input.category)) q = q.eq("category", str(input.category)!);
+      if (input.include_done !== true) q = q.eq("status", "active");
+      if (str(input.query)) q = q.ilike("title", `%${str(input.query)!.replace(/[%_]/g, "")}%`);
+      return must(await q);
+    }
+    case "create_assistant_record": {
+      const category = str(input.category);
+      if (!category || !["bill", "document", "followup", "appointment", "stock"].includes(category)) throw new Error("invalid category");
+      const row = {
+        user_id: userId, category, title: bounded(input.title, 200),
+        details: str(input.details)?.slice(0, 2000) ?? null,
+        counterparty: str(input.counterparty)?.slice(0, 200) ?? null,
+        due_at: input.due_at ? dateTime(input.due_at) : null,
+        amount: input.amount === undefined ? null : nonnegative(input.amount),
+        quantity: input.quantity === undefined ? null : nonnegative(input.quantity),
+        threshold: input.threshold === undefined ? null : nonnegative(input.threshold),
+      };
+      return must(await db.from("assistant_records").insert(row)
+        .select("id, category, title, due_at, status").single());
+    }
+    case "update_assistant_record": {
+      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (input.title !== undefined) patch.title = bounded(input.title, 200);
+      if (input.details !== undefined) patch.details = str(input.details)?.slice(0, 2000) ?? null;
+      if (input.counterparty !== undefined) patch.counterparty = str(input.counterparty)?.slice(0, 200) ?? null;
+      if (input.due_at !== undefined) { patch.due_at = input.due_at ? dateTime(input.due_at) : null; patch.notified_at = null; }
+      for (const key of ["amount", "quantity", "threshold"]) if (input[key] !== undefined) patch[key] = nonnegative(input[key]);
+      if (input.quantity !== undefined || input.threshold !== undefined) patch.notified_at = null;
+      if (input.status !== undefined) {
+        if (!["active", "done"].includes(String(input.status))) throw new Error("invalid status");
+        patch.status = input.status;
+      }
+      return must(await db.from("assistant_records").update(patch)
+        .eq("id", uuid(input.id)).eq("user_id", userId)
+        .select("id, category, title, due_at, status").single());
+    }
+    case "check_schedule_conflicts": {
+      const day = str(input.day);
+      if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("valid YYYY-MM-DD required");
+      const start = new Date(`${day}T00:00:00Z`);
+      const end = new Date(start.getTime() + 48 * 3600_000);
+      const [items, appointments] = await Promise.all([
+        db.from("items").select("id, content, due_at").eq("user_id", userId).eq("done", false)
+          .gte("due_at", start.toISOString()).lt("due_at", end.toISOString()).limit(100),
+        db.from("assistant_records").select("id, title, due_at").eq("user_id", userId)
+          .eq("category", "appointment").eq("status", "active")
+          .gte("due_at", start.toISOString()).lt("due_at", end.toISOString()).limit(100),
+      ]);
+      if (items.error || appointments.error) throw new Error(items.error?.message ?? appointments.error?.message);
+      const events = [...(items.data ?? []).map((x) => ({ title: x.content, due_at: x.due_at })),
+        ...(appointments.data ?? []).map((x) => ({ title: x.title, due_at: x.due_at }))];
+      const localEvents = events.filter((event) => event.due_at && localParts(tz, new Date(event.due_at)).date === day)
+        .sort((a, b) => a.due_at!.localeCompare(b.due_at!));
+      const closePairs = localEvents.slice(1).flatMap((event, index) => {
+        const previous = localEvents[index];
+        return new Date(event.due_at!).getTime() - new Date(previous.due_at!).getTime() < 60 * 60_000
+          ? [{ first: previous.title, second: event.title, minutes_apart: Math.round((new Date(event.due_at!).getTime() - new Date(previous.due_at!).getTime()) / 60_000) }]
+          : [];
+      });
+      return { events: localEvents, close_pairs: closePairs, note: "Items less than one hour apart may conflict; duration is unknown. Suggest changes for confirmation; do not make automatic edits." };
     }
 
     case "remember":

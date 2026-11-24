@@ -34,7 +34,7 @@ serve(async (req) => {
   if (!isCron(req)) throw new HttpError(401, "unauthorized");
   const admin = adminClient();
   const now = new Date();
-  const stats = { doses: 0, missed: 0, items: 0, refills: 0, briefings: 0, nudges: 0, morningEmails: 0 };
+  const stats = { doses: 0, missed: 0, items: 0, refills: 0, briefings: 0, nudges: 0, morningEmails: 0, records: 0 };
 
   await admin.rpc("ensure_dose_logs", { p_days: 2, p_user: null });
 
@@ -134,6 +134,42 @@ serve(async (req) => {
     });
     await admin.from("medications").update({ refill_notified_on: today }).eq("id", m.id);
     stats.refills++;
+  }
+
+  // Structured reminders: bills, documents, follow-ups, meetings, stock.
+  const { data: records } = await admin.from("assistant_records")
+    .select("id, user_id, category, title, counterparty, due_at, quantity, threshold, created_at")
+    .eq("status", "active").is("notified_at", null).limit(200);
+  const recordNames: Record<string, string> = {
+    bill: "موعد پرداخت", document: "انقضای مدرک", followup: "پیگیری ایمیل",
+    appointment: "آمادگی قرار", stock: "موجودی خانه",
+  };
+  for (const record of records ?? []) {
+    if (record.category === "followup" && record.counterparty?.includes("@")) {
+      const sender = record.counterparty.replace(/[%_,()]/g, "").slice(0, 160);
+      if (sender) {
+        const { count } = await admin.from("emails").select("id", { count: "exact", head: true })
+          .eq("user_id", record.user_id).ilike("from_addr", `%${sender}%`)
+          .gt("received_at", record.created_at);
+        if ((count ?? 0) > 0) {
+          await admin.from("assistant_records").update({ status: "response_detected", updated_at: now.toISOString() }).eq("id", record.id);
+          continue;
+        }
+      }
+    }
+    const stockLow = record.category === "stock" && record.quantity !== null && record.threshold !== null && record.quantity <= record.threshold;
+    const lead = record.category === "document" ? 7 * 86400_000
+      : record.category === "bill" || record.category === "appointment" ? 86400_000 : 0;
+    const dueNow = record.due_at && new Date(record.due_at).getTime() <= now.getTime() + lead;
+    if (!stockLow && !dueNow) continue;
+    await pushToUser(admin, record.user_id, {
+      title: recordNames[record.category] ?? "یادآوری",
+      body: record.title,
+      url: "/assistant/",
+      tag: `record-${record.id}`,
+    });
+    await admin.from("assistant_records").update({ notified_at: now.toISOString() }).eq("id", record.id);
+    stats.records++;
   }
 
   // 5) Morning briefing, evening review, weekly review at each user's local

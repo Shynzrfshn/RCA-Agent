@@ -20,6 +20,7 @@ const NAV = [
   { href: "/meds/", label: "داروها", Icon: PillIcon },
   { href: "/inbox/", label: "ایمیل", Icon: MailIcon },
   { href: "/chat/", label: "ایجنت", Icon: ChatIcon },
+  { href: "/assistant/", label: "پیگیری", Icon: ListIcon },
   { href: "/settings/", label: "تنظیمات", Icon: SettingsIcon },
 ];
 
@@ -92,14 +93,14 @@ export default function AppShell({
       {/* Mobile bottom nav */}
       <nav
         aria-label="ناوبری اصلی"
-        className="mobile-nav fixed inset-x-0 bottom-0 z-20 grid grid-cols-6 border-t border-border bg-surface/95 px-1 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden"
+        className="mobile-nav fixed inset-x-0 bottom-0 z-20 grid grid-cols-7 border-t border-border bg-surface/95 px-1 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden"
       >
         {NAV.map(({ href, label, Icon }) => (
           <Link
             key={href}
             href={href}
             aria-current={isActive(href) ? "page" : undefined}
-            className={`flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-lg py-1.5 text-[11px] ${
+            className={`flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-lg py-1.5 text-[10px] ${
               isActive(href) ? "text-accent" : "text-muted"
             }`}
           >
@@ -111,3 +112,4 @@ export default function AppShell({
     </div>
   );
 }
+
