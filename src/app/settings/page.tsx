@@ -67,6 +67,7 @@ export default function SettingsPage() {
         briefing_hour: 7,
         briefing_enabled: true,
         morning_email_enabled: false,
+        focus_mode_enabled: false,
         evening_hour: 21,
         evening_enabled: true,
         weekly_day: 5,
@@ -299,6 +300,12 @@ export default function SettingsPage() {
                   onChange={(e) => setProfile({ ...profile, morning_email_enabled: e.target.checked })}
                   className="mt-1 accent-[var(--accent)]" />
                 هر روز صبح خلاصهٔ شخصی برنامه، دارو و ایمیل‌های مهم را به ایمیل حسابم بفرست. این قابلیت به رضایت AI و راه‌اندازی سرویس ارسال رایگان نیاز دارد و هر زمان می‌توانم خاموشش کنم.
+              </label>
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" checked={profile.focus_mode_enabled ?? false}
+                  onChange={(e) => setProfile({ ...profile, focus_mode_enabled: e.target.checked })}
+                  className="mt-1 accent-[var(--accent)]" />
+                حالت تمرکز: پیشنهادهای غیرضروری ایجنت را موقتاً خاموش کن؛ یادآوری دارو و هشدارهای ضروری همچنان فعال‌اند.
               </label>
               <div className="flex justify-end">
                 <button type="submit" className="btn btn-primary">{saved ? "ذخیره شد ✓" : "ذخیره"}</button>

@@ -18,6 +18,7 @@ export default function DashboardPage() {
   const [doses, setDoses] = useState<Dose[]>([]);
   const [urgentMail, setUrgentMail] = useState(0);
   const [completedToday, setCompletedToday] = useState(0);
+  const [habitCompletions, setHabitCompletions] = useState(0);
   const [adherence, setAdherence] = useState<{ taken: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,6 +49,9 @@ export default function DashboardPage() {
     supabase.from("items").select("id", { count: "exact", head: true })
       .eq("done", true).gte("completed_at", start).lt("completed_at", end)
       .then(({ count }) => setCompletedToday(count ?? 0));
+    supabase.from("habit_completions").select("id", { count: "exact", head: true })
+      .gte("created_at", new Date(Date.now() - 7 * 86400_000).toISOString())
+      .then(({ count }) => setHabitCompletions(count ?? 0));
   }, [supabase]);
 
   useEffect(() => {
@@ -194,6 +198,7 @@ export default function DashboardPage() {
 
           <Section title="مرور ایجنت">
             <ReviewsCard />
+            <div className="mt-3 card flex items-center justify-between p-4 text-sm"><span>پیگیری عادت‌ها در ۷ روز</span><strong className="text-accent">{toFa(habitCompletions)} بار</strong></div>
             <div className="mt-3 card flex items-center justify-between p-4 text-sm"><span>پایبندی دارو در ۷ روز</span><strong className="text-accent">{adherence?.total ? `${toFa(Math.round((adherence.taken / adherence.total) * 100))}٪` : "—"}</strong></div>
             {doses.length > 0 && (
               <div className="card flex items-center gap-4 p-4">

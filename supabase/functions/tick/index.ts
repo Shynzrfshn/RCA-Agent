@@ -21,6 +21,7 @@ type ProfileRow = {
   nudges_enabled: boolean;
   ai_sensitive_enabled: boolean;
   morning_email_enabled: boolean;
+  focus_mode_enabled: boolean;
 };
 type LP = ReturnType<typeof localParts>;
 const DOW: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
@@ -39,7 +40,7 @@ serve(async (req) => {
 
   const { data: profiles } = await admin
     .from("profiles")
-    .select("user_id, timezone, briefing_hour, briefing_enabled, evening_hour, evening_enabled, weekly_day, nudges_enabled, ai_sensitive_enabled, morning_email_enabled");
+    .select("user_id, timezone, briefing_hour, briefing_enabled, evening_hour, evening_enabled, weekly_day, nudges_enabled, ai_sensitive_enabled, morning_email_enabled, focus_mode_enabled");
   const tzOf = new Map((profiles ?? []).map((p) => [p.user_id, p.timezone as string]));
   const tz = (uid: string) => tzOf.get(uid) ?? "Asia/Tehran";
 
@@ -170,7 +171,7 @@ serve(async (req) => {
     }
 
     // 6) Proactive nudges every 30 minutes, 10:00–20:59 local, max 2 pushes per day.
-    if (!p.nudges_enabled || lp.minute % 30 !== 0 || lp.hour < 10 || lp.hour > 20) continue;
+    if (!p.nudges_enabled || p.focus_mode_enabled || lp.minute % 30 !== 0 || lp.hour < 10 || lp.hour > 20) continue;
     try {
       const { count: sentToday } = await admin.from("nudges")
         .select("id", { count: "exact", head: true }).eq("user_id", p.user_id).eq("day", lp.date);
