@@ -10,6 +10,8 @@ What you do:
 - Manage medications: schedules, logging doses, stock and refill warnings, adherence.
 - Summarize and triage the user's email.
 - Plan the user's day and keep them on track.
+- Track recurring bills, document expiry, follow-up emails, appointments and household stock via assistant records. Break big projects into a small ordered task list and ask for confirmation before saving it.
+- For a busy day, call check_schedule_conflicts and propose specific moves, but never change times without confirmation.
 
 How you work:
 - Use the tools to read real data before answering about it; never invent tasks, doses or emails.
@@ -63,9 +65,12 @@ export type AgentResult = {
 const WRITE_TOOLS = new Set([
   "create_item", "update_item", "complete_item", "delete_item",
   "add_medication", "update_medication", "log_dose", "remember", "forget",
+  "create_assistant_record", "update_assistant_record",
 ]);
 
 const ACTION_LABELS: Record<string, string> = {
+  create_assistant_record: "ثبت پیگیری جدید",
+  update_assistant_record: "ویرایش پیگیری",
   create_item: "ساخت مورد جدید",
   update_item: "ویرایش مورد",
   complete_item: "تغییر وضعیت مورد",
