@@ -106,7 +106,7 @@ export default function AssistantPage() {
         {category === "bill" && <input type="number" min="0" className="field" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="مبلغ اختیاری" aria-label="مبلغ" />}
         {category === "stock" && <div className="grid grid-cols-2 gap-2"><input type="number" min="0" className="field" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="موجودی" aria-label="موجودی" /><input type="number" min="0" className="field" value={threshold} onChange={(e) => setThreshold(e.target.value)} placeholder="آستانه هشدار" aria-label="آستانه هشدار" /></div>}
         <button className="btn btn-primary w-full" disabled={busy}>{busy ? "در حال ثبت…" : "ثبت پیگیری"}</button>
-      </form><section className="card p-5"><h2 className="font-bold">تاریخچهٔ ایجنت</h2><p className="mt-1 text-xs text-muted">ابزارهای اجراشده و نتیجهٔ آن‌ها؛ جزئیات حساس ذخیره نمی‌شود.</p><ul className="mt-3 space-y-2 text-xs">{actions.map((a) => <li key={a.id} className="flex justify-between gap-2 border-b border-border pb-2"><span dir="ltr">{a.tool}</span><span>{a.result?.ok ? "موفق" : "ناموفق"}</span></li>)}</ul></section></div>
+      </form><section className="card p-5"><h2 className="font-bold">تاریخچهٔ ایجنت</h2><p className="mt-1 text-xs text-muted">ابزارهای اجراشده و نتیجهٔ آن‌ها؛ جزئیات حساس ذخیره نمی‌شود.</p><ul className="mt-3 space-y-2 text-xs">{actions.map((a) => <li key={a.id} className="flex justify-between gap-2 border-b border-border pb-2"><span dir="ltr">{a.tool}</span><span>{a.result?.ok === false ? "ناموفق" : a.result ? "موفق" : "نامشخص"}</span></li>)}</ul></section></div>
     </div>
   </AppShell>;
 }
