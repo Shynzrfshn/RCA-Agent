@@ -101,6 +101,17 @@ npm run dev
 
 در Supabase › Authentication › URL Configuration آدرس سایت و `http://localhost:3000` رو به Redirect URLs اضافه کن.
 
+### انتشار روی دامنهٔ جایگزین
+
+برای میزبانی ریشه‌ای مانند Vercel، ریپو را به‌عنوان پروژهٔ Next.js وارد کن و
+`NEXT_PUBLIC_SUPABASE_URL` و `NEXT_PUBLIC_SUPABASE_ANON_KEY` را در تنظیمات
+Environment Variables پروژه قرار بده. مقدار `RCA_BASE_PATH` را تنظیم نکن؛
+سایت از `/` منتشر می‌شود. گردش‌کار GitHub Pages مقدار `/RCA-Agent` را خودش
+تنظیم می‌کند و آدرس قبلی را حفظ می‌کند. پس از مشخص شدن دامنهٔ قطعی، مسیر
+`https://<domain>/dashboard/` را به Redirect URLs در Supabase اضافه کن.
+اگر `APP_ORIGIN` در Edge Functions تنظیم شده، دامنهٔ جدید را در سیاست CORS
+مجاز کن؛ برای بازگشت Gmail OAuth، `APP_URL` نیز باید به دامنهٔ قطعی اشاره کند.
+
 ## امنیت
 - همه‌ی جدول‌ها RLS دارن؛ توکن جیمیل با AES-GCM رمز شده و فقط سرویس به جدول `email_credentials` دسترسی داره.
 - ایجنت ایمیل نمی‌فرسته و محتوای ایمیل رو «داده‌ی نامطمئن» حساب می‌کنه (در برابر prompt injection).
